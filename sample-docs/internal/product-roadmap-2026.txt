@@ -1,0 +1,86 @@
+Contoso Technologies — Product Roadmap 2026 (INTERNAL)
+=======================================================
+Classification: INTERNAL — Not for external distribution
+Last updated: May 2026 | Owner: VP of Engineering, David Müller
+
+This document is intended for Contoso employees only. Do not share with customers,
+partners, or the press without prior approval from the Communications team.
+
+---
+
+ContosoERP 13.0 — Target Release: Q4 2026
+------------------------------------------
+Version 13.0 is the largest release in Contoso's history. Key themes: cloud-native
+architecture, AI-assisted workflows, and mobile-first field operations.
+
+Feature highlights:
+
+1. AI Purchase Order Assistant (Beta in Q2, GA in Q4)
+   - Automatically classifies and routes incoming purchase requests using GPT-4o
+   - Learns from historical approval patterns per department
+   - Expected to reduce manual PO processing time by ~60%
+   - Pilot customers: Philips Electronics (NL), Maersk Logistics (DK)
+
+2. Anomaly Detection for Finance Module
+   - Flags unusual transactions in real time using Azure ML anomaly detection models
+   - Configurable sensitivity thresholds per customer environment
+   - Integrates with existing approval workflows — no process redesign required
+   - Internal name: Project Sentinel
+
+3. Mobile Warehouse App v3.0
+   - Full offline support (sync on reconnect) — critical for Volvo factory floors
+   - Barcode + QR scanning revamp using device camera (removes dependency on handheld scanners)
+   - React Native rewrite; drops support for iOS < 15 and Android < 11
+
+4. ContosoERP Cloud Migration Tooling
+   - Automated assessment tool that maps on-prem configs to Cloud equivalents
+   - One-click data migration wizard for customers < 50GB database size
+   - Larger migrations handled by Professional Services team (separate pricing)
+
+5. Multi-currency and Multi-entity Enhancements
+   - Support for up to 50 legal entities in a single ERP instance (up from 20)
+   - Real-time FX rate integration (ECB + custom provider support)
+   - Required by Siemens Manufacturing expansion to Eastern Europe accounts
+
+---
+
+ContosoLogistics 4.2 — Target Release: Q3 2026
+------------------------------------------------
+- Real-time carbon footprint tracking per shipment (new ESG reporting requirement)
+- Integration with DB Schenker's new API v3 (current v2 end-of-life: December 2026)
+- Lane optimization AI: suggests optimal carrier + route based on cost, time, and CO2
+- Customers affected by DB Schenker EOL: ~120 accounts (Customer Success to contact by July)
+
+---
+
+Platform & Infrastructure
+--------------------------
+- Kubernetes migration: all Cloud-hosted customer environments to AKS by end of Q3
+  (currently 40% complete — 14 of 35 Cloud customers migrated)
+- Deprecation of legacy SOAP APIs: final EOL date set for March 2027
+  (REST equivalents available since ERP 11.2; ~30 customers still on SOAP — Engineering
+  to generate migration guides per customer by August)
+- SOC 2 Type II audit scheduled for September 2026 (audit firm: PwC)
+
+---
+
+Headcount & Resourcing (Confidential within Internal)
+------------------------------------------------------
+- 22 open engineering headcount approved for H2 2026 (Berlin: 14, Singapore: 8)
+- 3 senior AI/ML engineers being recruited — comp range €120K–€150K
+- Contractor budget for Q3/Q4: €1.8M (primarily for migration tooling)
+
+---
+
+Known Risks
+-----------
+- DB Schenker API v3 documentation is incomplete — Integration team flagged 3 open
+  questions; awaiting response since April. Escalation to account manager in progress.
+- AI PO Assistant accuracy on non-standard PO formats currently 81% (target: 90%).
+  Additional training data being sourced from Volvo and Siemens with consent.
+- Toronto office hiring slower than expected — 6 of 18 planned roles filled so far.
+  Recruiter contract extended through Q3.
+
+---
+
+Questions? Contact: roadmap@contoso-tech.internal (Internal use only)

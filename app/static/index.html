@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aria — AI Research &amp; Information Assistant</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --accent:       #6366f1;
+      --accent-dark:  #4f46e5;
+      --accent-light: #eef2ff;
+      --bg:           #f8fafc;
+      --surface:      #ffffff;
+      --border:       #e2e8f0;
+      --text:         #0f172a;
+      --text-muted:   #64748b;
+      --header-bg:    #0f172a;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    /* ── Header ───────────────────────────────────────────── */
+    header {
+      background: var(--header-bg);
+      height: 60px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+
+    .logo-icon { width: 34px; height: 34px; flex-shrink: 0; }
+
+    #logo-img {
+      width: 34px;
+      height: 34px;
+      object-fit: contain;
+      border-radius: 6px;
+      display: none;
+    }
+
+    .brand { display: flex; flex-direction: column; line-height: 1.2; }
+
+    .brand-name {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.01em;
+    }
+
+    .brand-sub {
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.38);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    #clear-btn {
+      margin-left: auto;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: rgba(255,255,255,0.7);
+      padding: 6px 16px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-family: inherit;
+      transition: background 0.15s, color 0.15s;
+    }
+    #clear-btn:hover { background: rgba(255,255,255,0.13); color: #fff; }
+
+    /* ── Chat area ───────────────────────────────────────── */
+    #chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 16px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      scroll-behavior: smooth;
+    }
+
+    #chat::-webkit-scrollbar { width: 4px; }
+    #chat::-webkit-scrollbar-track { background: transparent; }
+    #chat::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Empty state */
+    #empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      padding: 40px 24px;
+      max-width: 420px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .empty-gem { opacity: 0.22; }
+
+    #empty-state h2 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    #empty-state p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+
+    /* Message rows */
+    .msg-row {
+      display: flex;
+      gap: 10px;
+      max-width: 780px;
+      margin: 0 auto;
+      width: 100%;
+      animation: appear 0.18s ease-out;
+    }
+
+    @keyframes appear {
+      from { opacity: 0; transform: translateY(5px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .msg-row.user      { justify-content: flex-end; }
+    .msg-row.assistant { justify-content: flex-start; }
+
+    /* Avatars */
+    .avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 4px;
+    }
+
+    .avatar.ai   { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
+    .avatar.user { background: #1e293b; }
+
+    /* Bubbles */
+    .bubble {
+      padding: 12px 16px;
+      border-radius: 16px;
+      font-size: 0.93rem;
+      line-height: 1.65;
+      max-width: calc(100% - 46px);
+    }
+
+    .msg-row.user .bubble {
+      background: var(--accent);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+
+    .msg-row.assistant .bubble {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-bottom-left-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .bubble.error {
+      background: #fef2f2 !important;
+      border-color: #fecaca !important;
+      color: #991b1b !important;
+    }
+
+    /* Thinking dots */
+    .dots {
+      display: inline-flex;
+      gap: 5px;
+      align-items: center;
+      padding: 3px 0;
+    }
+
+    .dots span {
+      display: block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 1.3s ease-in-out infinite;
+    }
+
+    .dots span:nth-child(2) { animation-delay: 0.18s; }
+    .dots span:nth-child(3) { animation-delay: 0.36s; }
+
+    @keyframes pulse {
+      0%, 80%, 100% { opacity: 0.2; transform: scale(0.75); }
+      40%            { opacity: 1;   transform: scale(1);    }
+    }
+
+    /* Markdown styles inside AI bubbles */
+    .bubble p             { margin-bottom: 0.55em; }
+    .bubble p:last-child  { margin-bottom: 0; }
+    .bubble strong        { font-weight: 600; }
+    .bubble em            { font-style: italic; }
+    .bubble h1, .bubble h2, .bubble h3 { font-weight: 700; margin: 0.8em 0 0.25em; }
+    .bubble h1 { font-size: 1.1em; }
+    .bubble h2 { font-size: 1.03em; }
+    .bubble h3 { font-size: 0.97em; }
+
+    .bubble ul, .bubble ol { padding-left: 18px; margin: 5px 0; }
+    .bubble li { margin: 3px 0; }
+
+    .bubble code {
+      font-family: "SF Mono", "Fira Code", "Menlo", monospace;
+      font-size: 0.85em;
+      background: #f1f5f9;
+      color: #7c3aed;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    .bubble pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 14px 16px;
+      border-radius: 10px;
+      overflow-x: auto;
+      margin: 8px 0;
+      font-size: 0.83em;
+      line-height: 1.5;
+    }
+
+    .bubble pre code {
+      background: none;
+      color: inherit;
+      padding: 0;
+      font-size: inherit;
+    }
+
+    /* ── Input area ──────────────────────────────────────── */
+    #input-area {
+      flex-shrink: 0;
+      padding: 10px 16px 20px;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+    }
+
+    #input-wrap {
+      max-width: 780px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 14px;
+      padding: 10px 10px 10px 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    #input-wrap:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+    }
+
+    #input {
+      flex: 1;
+      border: none;
+      outline: none;
+      resize: none;
+      font-size: 0.93rem;
+      font-family: inherit;
+      line-height: 1.5;
+      background: transparent;
+      color: var(--text);
+      min-height: 22px;
+      max-height: 140px;
+    }
+
+    #input::placeholder { color: var(--text-muted); }
+
+    #send-btn {
+      width: 36px;
+      height: 36px;
+      flex-shrink: 0;
+      background: var(--accent);
+      border: none;
+      border-radius: 9px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    #send-btn:hover:not(:disabled)  { background: var(--accent-dark); }
+    #send-btn:active:not(:disabled) { transform: scale(0.91); }
+    #send-btn:disabled              { background: var(--border); cursor: not-allowed; }
+
+    #send-btn svg { color: #fff; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      <!-- Custom logo (shown when LOGO_URL is set); fallback to gem SVG -->
+      <img id="logo-img" alt="Company logo">
+      <!-- Aria faceted-gem icon (default) -->
+      <svg class="logo-icon" id="logo-svg" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="17,3 31,17 17,31 3,17"
+                 fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="1"/>
+        <polygon points="17,7 28,17 17,27 6,17" fill="rgba(99,102,241,0.55)"/>
+        <polygon points="17,7 28,17 17,17"        fill="rgba(139,92,246,0.75)"/>
+        <polygon points="17,7 17,17 6,17"         fill="rgba(99,102,241,0.85)"/>
+        <polygon points="17,27 28,17 17,17"       fill="rgba(99,102,241,0.4)"/>
+        <polygon points="17,27 6,17 17,17"        fill="rgba(139,92,246,0.35)"/>
+        <circle cx="17" cy="17" r="2.6" fill="white" opacity="0.9"/>
+        <line x1="17" y1="3"  x2="17" y2="7"  stroke="white" stroke-width="1.5"
+              stroke-linecap="round" opacity="0.6"/>
+        <line x1="31" y1="17" x2="27" y2="17" stroke="white" stroke-width="1"
+              stroke-linecap="round" opacity="0.35"/>
+        <line x1="3"  y1="17" x2="7"  y2="17" stroke="white" stroke-width="1"
+              stroke-linecap="round" opacity="0.35"/>
+      </svg>
+
+      <div class="brand">
+        <span class="brand-name">Aria</span>
+        <span class="brand-sub" id="brand-sub">by Contoso</span>
+      </div>
+    </div>
+
+    <button id="clear-btn">New chat</button>
+  </header>
+
+  <div id="chat">
+    <div id="empty-state">
+      <svg class="empty-gem" width="56" height="56" viewBox="0 0 34 34" fill="none">
+        <polygon points="17,7 28,17 17,27 6,17"  fill="#6366f1"/>
+        <polygon points="17,7 28,17 17,17"        fill="#8b5cf6"/>
+        <polygon points="17,7 17,17 6,17"         fill="#6366f1" opacity="0.85"/>
+        <circle cx="17" cy="17" r="2.6" fill="white"/>
+      </svg>
+      <h2>How can I help you?</h2>
+      <p>Ask Aria anything about Contoso's documents. Answers are grounded in your knowledge base.</p>
+    </div>
+  </div>
+
+  <div id="input-area">
+    <div id="input-wrap">
+      <textarea id="input" rows="1" placeholder="Ask a question…"></textarea>
+      <button id="send-btn" title="Send (Enter)">
+        <!-- Up-arrow send icon -->
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+          <path d="M12 20V4M12 4L6 10M12 4l6 6"
+                stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const chat     = document.getElementById('chat');
+    const input    = document.getElementById('input');
+    const sendBtn  = document.getElementById('send-btn');
+    const clearBtn = document.getElementById('clear-btn');
+
+    let history = [];
+
+    // ── Branding ──────────────────────────────────────────────
+    (async () => {
+      try {
+        const b = await fetch('/branding').then(r => r.json());
+        if (b.company_name) {
+          document.getElementById('brand-sub').textContent = 'by ' + b.company_name;
+          document.title = 'Aria — ' + b.company_name;
+          // Update empty state text too
+          const p = document.querySelector('#empty-state p');
+          if (p) p.textContent = `Ask Aria anything about ${b.company_name}'s documents. Answers are grounded in your knowledge base.`;
+        }
+        if (b.logo_url) {
+          const img = document.getElementById('logo-img');
+          const svg = document.getElementById('logo-svg');
+          img.src = b.logo_url;
+          img.style.display = 'block';
+          svg.style.display = 'none';
+        }
+      } catch (_) {}
+    })();
+
+    // ── Markdown renderer (no external deps) ──────────────────
+    function escHtml(t) {
+      return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function renderInline(text) {
+      let h = escHtml(text);
+      h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
+      h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      h = h.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+      return h;
+    }
+
+    function renderMarkdown(text) {
+      const lines = text.split('\n');
+      let html = '';
+      let i = 0;
+      let inCode = false;
+      let codeLines = [];
+
+      while (i < lines.length) {
+        const line = lines[i];
+
+        if (line.startsWith('```')) {
+          if (!inCode) {
+            inCode = true; codeLines = [];
+          } else {
+            html += `<pre><code>${escHtml(codeLines.join('\n'))}</code></pre>`;
+            inCode = false; codeLines = [];
+          }
+          i++; continue;
+        }
+
+        if (inCode) { codeLines.push(line); i++; continue; }
+
+        // Headers
+        const hm = line.match(/^(#{1,3}) (.+)/);
+        if (hm) {
+          const tag = `h${hm[1].length}`;
+          html += `<${tag}>${renderInline(hm[2])}</${tag}>`;
+          i++; continue;
+        }
+
+        // Unordered list
+        if (/^[-*] /.test(line)) {
+          html += '<ul>';
+          while (i < lines.length && /^[-*] /.test(lines[i])) {
+            html += `<li>${renderInline(lines[i].slice(2))}</li>`;
+            i++;
+          }
+          html += '</ul>'; continue;
+        }
+
+        // Ordered list
+        if (/^\d+\. /.test(line)) {
+          html += '<ol>';
+          while (i < lines.length && /^\d+\. /.test(lines[i])) {
+            html += `<li>${renderInline(lines[i].replace(/^\d+\. /, ''))}</li>`;
+            i++;
+          }
+          html += '</ol>'; continue;
+        }
+
+        // Blank line
+        if (line.trim() === '') { i++; continue; }
+
+        // Paragraph – collect consecutive plain lines
+        const para = [];
+        while (
+          i < lines.length &&
+          lines[i].trim() !== '' &&
+          !lines[i].startsWith('```') &&
+          !/^[-*#\d]/.test(lines[i])
+        ) {
+          para.push(renderInline(lines[i]));
+          i++;
+        }
+        if (para.length) html += `<p>${para.join('<br>')}</p>`;
+      }
+
+      // Unclosed code block (mid-stream)
+      if (inCode && codeLines.length) {
+        html += `<pre><code>${escHtml(codeLines.join('\n'))}</code></pre>`;
+      }
+
+      return html;
+    }
+
+    // ── DOM helpers ───────────────────────────────────────────
+    const ariaAvatarSvg = `
+      <svg width="16" height="16" viewBox="0 0 34 34" fill="none">
+        <polygon points="17,7 28,17 17,27 6,17"  fill="white" opacity="0.85"/>
+        <polygon points="17,7 28,17 17,17"        fill="white" opacity="0.6"/>
+        <circle cx="17" cy="17" r="2.6" fill="white"/>
+      </svg>`;
+
+    const userAvatarSvg = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(255,255,255,0.8)">
+        <path d="M12 12a5 5 0 100-10 5 5 0 000 10zm-7 9a7 7 0 1114 0H5z"/>
+      </svg>`;
+
+    function removeEmpty() {
+      document.getElementById('empty-state')?.remove();
+    }
+
+    function addUserMessage(text) {
+      removeEmpty();
+      const row = document.createElement('div');
+      row.className = 'msg-row user';
+      row.innerHTML = `
+        <div class="bubble">${escHtml(text)}</div>
+        <div class="avatar user">${userAvatarSvg}</div>`;
+      chat.appendChild(row);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function addAIBubble() {
+      const row = document.createElement('div');
+      row.className = 'msg-row assistant';
+      row.innerHTML = `
+        <div class="avatar ai">${ariaAvatarSvg}</div>
+        <div class="bubble">
+          <div class="dots"><span></span><span></span><span></span></div>
+        </div>`;
+      chat.appendChild(row);
+      chat.scrollTop = chat.scrollHeight;
+      return row.querySelector('.bubble');
+    }
+
+    function setLoading(on) {
+      sendBtn.disabled = on;
+      input.disabled   = on;
+    }
+
+    function emptyState() {
+      const es = document.createElement('div');
+      es.id = 'empty-state';
+      es.innerHTML = `
+        <svg class="empty-gem" width="56" height="56" viewBox="0 0 34 34" fill="none">
+          <polygon points="17,7 28,17 17,27 6,17"  fill="#6366f1"/>
+          <polygon points="17,7 28,17 17,17"        fill="#8b5cf6"/>
+          <polygon points="17,7 17,17 6,17"         fill="#6366f1" opacity="0.85"/>
+          <circle cx="17" cy="17" r="2.6" fill="white"/>
+        </svg>
+        <h2>How can I help you?</h2>
+        <p>Ask Aria anything about Contoso's documents. Answers are grounded in your knowledge base.</p>`;
+      return es;
+    }
+
+    // ── Send ──────────────────────────────────────────────────
+    async function sendMessage() {
+      const message = input.value.trim();
+      if (!message) return;
+
+      input.value = '';
+      input.style.height = 'auto';
+      addUserMessage(message);
+      setLoading(true);
+
+      const bubble = addAIBubble();
+
+      try {
+        const res = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message, history }),
+        });
+
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+
+        const reader  = res.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText  = '';
+        let first     = true;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const lines = decoder.decode(value, { stream: true }).split('\n');
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const payload = line.slice(6).trim();
+            if (payload === '[DONE]') break;
+
+            try {
+              const parsed = JSON.parse(payload);
+              if (parsed.error) {
+                bubble.classList.add('error');
+                bubble.textContent = parsed.error;
+                first = false;
+              } else if (parsed.content) {
+                if (first) { first = false; }
+                fullText += parsed.content;
+                bubble.innerHTML = renderMarkdown(fullText);
+                chat.scrollTop = chat.scrollHeight;
+              }
+            } catch (_) {}
+          }
+        }
+
+        if (first) {
+          bubble.textContent = 'No response received.';
+        }
+
+        history.push({ role: 'user',      content: message  });
+        history.push({ role: 'assistant', content: fullText });
+        if (history.length > 20) history = history.slice(-20);
+
+      } catch (err) {
+        bubble.classList.add('error');
+        bubble.textContent = 'Connection error: ' + err.message;
+      } finally {
+        setLoading(false);
+        input.focus();
+      }
+    }
+
+    // ── Events ────────────────────────────────────────────────
+    sendBtn.addEventListener('click', sendMessage);
+
+    clearBtn.addEventListener('click', () => {
+      history = [];
+      chat.replaceChildren(emptyState());
+    });
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    });
+
+    input.addEventListener('input', () => {
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+    });
+  </script>
+
+</body>
+</html>

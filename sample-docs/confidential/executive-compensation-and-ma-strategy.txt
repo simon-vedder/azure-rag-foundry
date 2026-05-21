@@ -1,0 +1,110 @@
+Contoso Technologies — Executive Compensation & M&A Strategy
+=============================================================
+Classification: CONFIDENTIAL — Board and C-suite only
+Prepared by: CFO Office | Date: April 2026
+Distribution: CEO, CFO, CTO, Board of Directors, Legal Counsel
+
+This document contains material non-public information. Unauthorised disclosure
+may constitute a violation of securities law and Contoso's confidentiality policy.
+
+===========================================================================
+SECTION 1 — EXECUTIVE COMPENSATION (FY2026)
+===========================================================================
+
+Base Salaries (Annual, EUR)
+----------------------------
+  CEO — Maria Lindqvist:        €480,000
+  CFO — Anna Eriksson:          €360,000
+  CTO — Jonas Bergström:        €380,000
+  VP Engineering — David Müller: €290,000
+  VP Sales — Sarah Chen:        €310,000 (+ commission structure below)
+
+Short-Term Incentive Plan (STIP) — FY2026 Targets
+---------------------------------------------------
+Payout as % of base salary, contingent on company hitting annual targets:
+
+  ARR growth >= 20% YoY:        +25% base
+  EBITDA margin >= 23%:         +15% base
+  Customer churn < 3%:          +10% base
+  Maximum combined payout:      +50% base
+
+  FY2025 actual STIP payout (for reference): 38% average across C-suite.
+
+Long-Term Incentive Plan (LTIP) — Options & RSUs
+-------------------------------------------------
+  2026 grant (cliff vest 3 years, then monthly over 12 months):
+    CEO:  80,000 RSUs @ €9.20 strike (current 409A valuation)
+    CFO:  45,000 RSUs
+    CTO:  50,000 RSUs
+    VP Engineering: 28,000 RSUs
+    VP Sales:       30,000 RSUs
+
+  Total dilution from 2026 LTIP grant: ~1.4% fully diluted
+
+Retention Bonuses
+-----------------
+  CTO Jonas Bergström is subject to a retention agreement (€200,000 payable in
+  two tranches: €100K in Jan 2027, €100K in Jan 2028) contingent on continued
+  employment. This was negotiated in response to an approach from a competitor
+  in Q4 2025. Details are known only to CEO, CFO, and Board Chair.
+
+===========================================================================
+SECTION 2 — M&A STRATEGY AND ACTIVE PIPELINE (STRICTLY CONFIDENTIAL)
+===========================================================================
+
+Strategic Rationale
+--------------------
+The Board approved a buy-and-build strategy in February 2026. Contoso has
+€45M in dry powder (cash reserves earmarked for acquisitions) and an
+additional €60M in committed revolving credit facility (Nordea, Handelsbanken).
+
+Priority acquisition criteria:
+  - EMEA-based SaaS or services company in adjacent verticals
+  - ARR between €5M–€25M
+  - EBITDA-positive or clear path to profitability within 12 months of acquisition
+  - Synergies with ContosoERP customer base (same ICP)
+
+Active Targets (Codenames)
+---------------------------
+
+  PROJECT FALCON — [REDACTED COMPANY NAME], Netherlands
+  -------------------------------------------------------
+  - Vertical: Procurement analytics (SaaS, 65 customers, €11M ARR)
+  - Status: LOI signed April 28, 2026. Due diligence in progress (legal: NautaDutilh)
+  - Indicative valuation: 5.5× ARR = ~€60.5M (to be negotiated post-DD)
+  - Strategic fit: Acquisition would give Contoso a best-in-class analytics layer
+    for procurement, plugging directly into ContosoERP's purchasing module.
+    Estimated cross-sell opportunity: €4–6M ARR within 18 months.
+  - Risk: Target has one customer (Unilever) representing 22% of ARR — concentration risk.
+  - Expected close: August 2026 (subject to regulatory approval — no CMA/EU review expected)
+  - Internal deal team: CEO, CFO, VP Corp Dev (Lena Holm), External legal
+
+  PROJECT SUMMIT — [REDACTED COMPANY NAME], Germany
+  ---------------------------------------------------
+  - Vertical: Field service management SaaS, 200 SME customers
+  - ARR: €7.2M, EBITDA: breakeven
+  - Status: Exploratory — initial conversation held with founder in March.
+    Founder open to acquisition but prefers earnout structure.
+  - Valuation expectation: 6× ARR (above Contoso's preferred range)
+  - Next step: CFO to present revised offer with 4× cash + earnout by end of May
+  - Strategic fit: Moderate. Complements warehouse mobile app but limited ERP overlap.
+  - Decision: Continue if valuation expectation moves to ≤ 5×, otherwise deprioritize.
+
+Targets Screened and Passed (Q1 2026)
+---------------------------------------
+  - 14 companies evaluated; 11 passed due to valuation, churn, or strategic misfit.
+  - 3 placed on 6-month watchlist for re-evaluation.
+
+===========================================================================
+SECTION 3 — UPCOMING BOARD EVENTS
+===========================================================================
+
+  May 28, 2026:   Board meeting — Project Falcon DD update
+  June 15, 2026:  Annual Strategy Offsite (Stockholm, Berns Hotel)
+  July 1, 2026:   Deadline for FY2027 budget submission to Board Finance Committee
+  September 2026: SOC 2 Type II audit results presentation to Audit Committee
+
+===========================================================================
+
+This document must not be printed, forwarded, or stored outside of approved
+systems. Questions: legal@contoso-tech.internal or cfo@contoso-tech.internal
