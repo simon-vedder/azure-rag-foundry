@@ -17,10 +17,6 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.0"
     }
-    http = {
-      source  = "hashicorp/http"
-      version = "~> 3.0"
-    }
   }
 }
 
@@ -30,13 +26,6 @@ provider "azurerm" {
 }
 
 provider "azuread" {}
-
-# Used to detect the public IP of the machine running terraform apply.
-# The IP is added to the AI Search firewall when VNet integration is enabled,
-# so data plane resources (index, indexers, etc.) can be managed without a VNet-connected runner.
-data "http" "my_ip" {
-  url = "https://api.ipify.org"
-}
 
 data "azuread_client_config" "current" {}
 

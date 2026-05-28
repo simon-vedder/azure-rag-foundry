@@ -12,16 +12,6 @@ variable "location" {
   default     = "swedencentral"
 }
 
-# ============================================================
-# SKU CONFIGURATION
-# Change the values below to upgrade from test to production.
-# ============================================================
-
-variable "app_service_sku" {
-  description = "App Service Plan SKU. Default: P1v3 (~$150/mo). VNet integration requires P1v3 or higher."
-  default     = "P1v3"
-}
-
 variable "openai_model" {
   description = "Azure OpenAI chat model. Do not use gpt-4o-mini (retired March 31 2026) or gpt-4o versions 2024-05-13/2024-08-06 (also retired)."
   default     = "gpt-4o"
@@ -34,17 +24,12 @@ variable "openai_model_version" {
 
 variable "openai_capacity" {
   description = "OpenAI deployment capacity in thousands of tokens per minute."
-  default     = 10 # PROD UPGRADE: increase as needed
+  default     = 10
 }
 
 variable "embedding_model" {
   description = "Azure OpenAI embedding model deployment name. Do not change without also updating index dimensions in search_dataplane.tf."
   default     = "text-embedding-3-small"
-}
-
-variable "enable_vnet_integration" {
-  description = "Enables App Service VNet integration (outbound) and private endpoints for all backends. Requires P1v3+ App Service SKU."
-  default     = false # PROD UPGRADE: change to true (also set app_service_sku to "P1v3")
 }
 
 variable "company_name" {

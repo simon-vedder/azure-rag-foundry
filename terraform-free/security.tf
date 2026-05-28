@@ -43,9 +43,6 @@ resource "azuread_application" "main" {
 
 resource "azuread_service_principal" "main" {
   client_id                    = azuread_application.main.client_id
-  # Only users explicitly assigned an app role in Entra ID can authenticate.
-  # Assign Internal.Read or Confidential.Read to grant elevated access.
-  # Any tenant user without an explicit assignment is denied at the Easy Auth layer.
   app_role_assignment_required = true
 }
 
@@ -62,20 +59,9 @@ resource "azurerm_role_assignment" "app_openai" {
   principal_id         = azurerm_linux_web_app.main.identity[0].principal_id
 }
 
-# RBAC: App Service Managed Identity → AI Search (read + query)
-resource "azurerm_role_assignment" "app_search_reader" {
-  scope                = azurerm_search_service.main.id
-  role_definition_name = "Search Index Data Reader"
-  principal_id         = azurerm_linux_web_app.main.identity[0].principal_id
-}
-
 # RBAC: App Service Managed Identity → Storage (read documents)
 resource "azurerm_role_assignment" "app_storage" {
   scope                = azurerm_storage_account.main.id
   role_definition_name = "Storage Blob Data Reader"
   principal_id         = azurerm_linux_web_app.main.identity[0].principal_id
 }
-
-# RBAC: Local user running ingest.py needs these roles assigned manually or via CI
-# Search Index Data Contributor + Storage Blob Data Reader on the storage account
-# Cognitive Services OpenAI User on the OpenAI account

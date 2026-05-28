@@ -2,9 +2,14 @@
 
 **Aria** is a ready-to-deploy enterprise RAG chatbot built on Azure. Employees authenticate with their company's Entra ID account and ask questions against internal documents in natural language. Answers stream back in real time, grounded in the documents — not hallucinated.
 
-Access is role-based: users only see documents they're authorized for. All service-to-service communication uses Managed Identity — no API keys anywhere.
+Access is role-based: users only see documents they're authorized for.
 
-The stack is production-ready from day one. Two variables flip it from a €15/month test setup to a fully private, VNet-isolated production deployment.
+Two Terraform configs are included:
+
+| Config | Tier | Cost | Use case |
+|---|---|---|---|
+| `terraform/` | Standard | ~$416/month | Production — MSI everywhere, no API keys, VNet-ready |
+| `terraform-free/` | Free | ~$15/month | Testing/demos — API keys, no VNet, fully functional |
 
 ---
 
@@ -15,24 +20,18 @@ The stack is production-ready from day one. Two variables flip it from a €15/m
 - [Prerequisites](#prerequisites)
 - [Quickstart](#quickstart)
   - [1. Login](#1-login)
-  - [2. Check free AI Search quota](#2-check-free-ai-search-quota)
+  - [2. Check free AI Search quota](#2-check-free-ai-search-quota-free-config-only)
   - [3. Configure Terraform](#3-configure-terraform)
-  - [4. Add your company logo](#4-add-your-company-logo-optional)
-  - [5. Deploy infrastructure](#5-deploy-infrastructure)
-  - [6. Deploy the app](#6-deploy-the-app)
-  - [7. Grant admin consent](#7-grant-admin-consent-entra-admin-required)
-  - [8. Assign app roles to users](#8-assign-app-roles-to-users)
-  - [9. Grant your own RBAC roles for ingestion](#9-grant-your-own-rbac-roles-for-ingestion)
-  - [10. Upload documents and ingest](#10-upload-documents-and-ingest)
-  - [11. Open the app](#11-open-the-app)
+  - [4. Deploy infrastructure and app](#4-deploy-infrastructure-and-app)
+  - [5. Grant admin consent](#5-grant-admin-consent-entra-admin-required)
+  - [6. Assign app roles to users](#6-assign-app-roles-to-users)
+  - [7. Upload documents](#7-upload-documents)
+  - [8. Open the app](#8-open-the-app)
 - [Managing the Knowledge Base](#managing-the-knowledge-base)
   - [Adding or updating documents](#adding-or-updating-documents)
   - [Deleting documents](#deleting-documents)
   - [Changing a document's access level](#changing-a-documents-access-level)
-  - [Automating ingestion](#automating-ingestion)
 - [Company Branding](#company-branding)
-  - [Company name](#company-name)
-  - [Logo](#logo)
 - [Going to Production](#going-to-production)
 - [Cost Estimate](#cost-estimate)
 - [Variables Reference](#variables-reference)
@@ -43,7 +42,9 @@ The stack is production-ready from day one. Two variables flip it from a €15/m
   - [Reliability & Capacity](#reliability--capacity)
   - [Monitoring & Cost](#monitoring--cost)
   - [Ongoing Operations](#ongoing-operations)
+- [Production Recommendations](#production-recommendations)
 - [Destroying](#destroying)
+- [Quick Deploy — All Commands](#quick-deploy--all-commands)
 
 ---
 
@@ -57,7 +58,7 @@ The stack is production-ready from day one. Two variables flip it from a €15/m
 - **Zero API keys** — App Service Managed Identity accesses OpenAI, Search, and Storage via RBAC
 - **Markdown rendering** — AI responses render with formatting (headers, lists, code blocks)
 - **Conversation history** — last 10 turns sent with each request for context
-- **Company branding** — swap in your company name and logo with one Terraform variable and one file
+- **Company branding** — set your company name via a Terraform variable
 
 ---
 
@@ -89,12 +90,16 @@ App Service Managed Identity (RBAC, no keys)
 - Azure subscription with **Azure OpenAI access approved** ([request here](https://aka.ms/oai/access) — approval can take 1–2 days)
 - [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.9
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
-- Python 3.12 (for running `ingest.py` locally)
-- `zip` (bundled on macOS/Linux; on Windows use WSL or Git Bash)
 
 ---
 
 ## Quickstart
+
+Pick the config that fits your situation:
+- **`terraform-free/`** — free AI Search, B1 App Service, API keys. Start here to try the app.
+- **`terraform/`** — standard AI Search, P1v3 App Service, Managed Identity everywhere. Use for production.
+
+The steps below apply to both. Replace `terraform/` with `terraform-free/` if you're using the free config.
 
 ### 1. Login
 
@@ -103,7 +108,7 @@ az login
 az account set --subscription "<your-subscription-id>"
 ```
 
-### 2. Check free AI Search quota
+### 2. Check free AI Search quota (free config only)
 
 Only one free-tier AI Search service is allowed per subscription:
 
@@ -111,11 +116,11 @@ Only one free-tier AI Search service is allowed per subscription:
 az search service list --query "[?sku.name=='free'].{name:name, rg:resourceGroup}" -o table
 ```
 
-If one already exists, set `search_sku = "basic"` in your `terraform.tfvars` (step 3).
+If one already exists, use the standard `terraform/` config instead.
 
 ### 3. Configure Terraform
 
-Create `terraform/terraform.tfvars`:
+Create `terraform-free/terraform.tfvars` (or `terraform/terraform.tfvars` for prod):
 
 ```hcl
 subscription_id = "<your-subscription-id>"
@@ -124,49 +129,29 @@ company_name    = "Acme Corp"           # shown in the Aria UI
 
 All other variables have sensible defaults. See [variables reference](#variables-reference) for the full list.
 
-### 4. Add your company logo (optional)
-
-Drop a logo file into the `branding/` folder at the repo root:
-
-```
-branding/
-  logo.png    # also accepts .svg or .jpg
-```
-
-Terraform uploads this to a public blob container and wires the URL into the app automatically. If no logo is provided, Aria's default gem icon is used.
-
-### 5. Deploy infrastructure
+### 4. Deploy infrastructure and app
 
 ```bash
-cd terraform
+cd terraform-free    # or: cd terraform
 terraform init
 terraform apply
 ```
 
-This takes 5–10 minutes. Resources created: resource group, OpenAI account, AI Search, Storage, App Service, VNet, private DNS zones, App Registration, RBAC assignments.
+This takes 5–10 minutes. Terraform creates all infrastructure and deploys the app in one step — it zips `app/` automatically and deploys it to App Service via `zip_deploy_file`.
 
-### 6. Deploy the app
-
-From the repo root:
-
-```bash
-./deploy.sh
-```
-
-This zips the `app/` folder, reads Terraform outputs for the target App Service, and deploys. Build + startup on Azure takes ~5 minutes.
-
-### 7. Grant admin consent (Entra admin required)
+### 5. Grant admin consent (Entra admin required)
 
 The App Registration requests `User.Read` from Microsoft Graph. An Entra admin must grant tenant-wide consent:
 
 ```bash
-CLIENT_ID=$(terraform -chdir=terraform output -raw entra_app_client_id)
+CLIENT_ID=$(terraform -chdir=terraform-free output -raw entra_app_client_id)
+# or: terraform -chdir=terraform output -raw entra_app_client_id
 az ad app permission admin-consent --id "$CLIENT_ID"
 ```
 
 Or in the portal: **Entra ID → App registrations → `rag-rag-<suffix>` → API permissions → Grant admin consent**.
 
-### 8. Assign app roles to users
+### 6. Assign app roles to users
 
 Terraform creates the roles but deliberately does not assign them — you control who gets access.
 
@@ -178,29 +163,11 @@ In the portal: **Entra ID → Enterprise applications → `rag-rag-<suffix>` →
 | `Internal Reader` | `public/` + `internal/` |
 | `Confidential Reader` | `public/` + `internal/` + `confidential/` |
 
-### 9. Grant your own RBAC roles for ingestion
+### 7. Upload your own documents (optional)
 
-`ingest.py` runs locally under your `az login` credentials. Assign yourself the required roles once:
+Sample documents are already in place from the `terraform apply` in step 4 — you can start chatting as soon as steps 5 and 6 are done. View `storage.tf` to see where and how the sample documents are uploaded.
 
-```bash
-RG=$(terraform -chdir=terraform output -raw resource_group_name)
-ME=$(az ad signed-in-user show --query id -o tsv)
-
-OAI_ID=$(az cognitiveservices account list -g "$RG" --query "[0].id" -o tsv)
-SRCH_ID=$(az search service list -g "$RG" --query "[0].id" -o tsv)
-ST_ID=$(az storage account list -g "$RG" --query "[0].id" -o tsv)
-
-az role assignment create --role "Cognitive Services OpenAI User"  --assignee "$ME" --scope "$OAI_ID"
-az role assignment create --role "Search Index Data Contributor"   --assignee "$ME" --scope "$SRCH_ID"
-az role assignment create --role "Search Service Contributor"      --assignee "$ME" --scope "$SRCH_ID"
-az role assignment create --role "Storage Blob Data Reader"        --assignee "$ME" --scope "$ST_ID"
-```
-
-> Role assignments can take 5–10 minutes to propagate in Azure AD.
-
-### 10. Upload documents and ingest
-
-Documents are organized by access level using folder prefixes inside the `documents` blob container:
+This step is only needed when you want to load your own content. Documents are organized by access level using folder prefixes inside the `documents` blob container:
 
 ```
 documents/
@@ -208,8 +175,6 @@ documents/
   internal/       → Internal Reader role required
   confidential/   → Confidential Reader role required
 ```
-
-Upload your files:
 
 ```bash
 STORAGE=$(terraform -chdir=terraform output -raw storage_account_name)
@@ -221,34 +186,22 @@ az storage blob upload-batch \
   --auth-mode login
 ```
 
-Run the ingestion pipeline:
+Supported formats: **PDF, DOCX, TXT, MD, CSV**. The AI Search indexer picks up new files automatically every hour. To trigger it immediately: Azure portal → AI Search → Indexers → select indexer → **Run**.
+
+> **Permissions:** uploading requires `Storage Blob Data Contributor` on the storage account. Assign it once: `az role assignment create --role "Storage Blob Data Contributor" --assignee "<your-object-id>" --scope "<storage-account-id>"`
+
+### 8. Open the app
 
 ```bash
-cd app
-pip install -r requirements.txt
-
-export AZURE_OPENAI_ENDPOINT=$(terraform -chdir=../terraform output -raw openai_endpoint)
-export AZURE_SEARCH_ENDPOINT=$(terraform -chdir=../terraform output -raw search_endpoint)
-export AZURE_STORAGE_ACCOUNT=$(terraform -chdir=../terraform output -raw storage_account_name)
-
-python ingest.py
-```
-
-Supported formats: **PDF, DOCX, TXT**. Text is chunked at 700 tokens with 70-token overlap and embedded with `text-embedding-3-small`.
-
-Re-run `ingest.py` any time you add or update documents.
-
-### 11. Open the app
-
-```bash
-terraform -chdir=terraform output -raw app_url
+terraform -chdir=terraform-free output -raw app_url
+# or: terraform -chdir=terraform output -raw app_url
 ```
 
 ---
 
 ## Managing the Knowledge Base
 
-Once the initial setup is done, keeping the knowledge base up to date is a two-step cycle: **upload to blob storage → run `ingest.py`**.
+Ingestion is fully automated. The AI Search indexers run every hour and pick up new, modified, and deleted documents automatically. The only admin task is managing files in blob storage.
 
 ### Adding or updating documents
 
@@ -274,44 +227,32 @@ az storage blob upload \
   --auth-mode login
 ```
 
-Then re-run the ingestion pipeline:
-
-```bash
-cd app
-python ingest.py
-```
-
-Re-running is safe. Each chunk gets a deterministic ID based on filename, page number, and chunk position — so existing chunks are overwritten in place (upsert), not duplicated.
+The indexer picks up the new file on the next scheduled run (up to 1 hour). To trigger it immediately: Azure portal → AI Search → Indexers → select the relevant indexer → **Run**.
 
 ### Deleting documents
 
-Deleting a blob from storage does **not** automatically remove its chunks from the search index. You need to clean them up manually.
+The indexers use a soft-delete detection policy. To delete a document from the index:
 
-Delete the blob first:
+1. Set the `IsDeleted` metadata property on the blob to `"true"`:
 
 ```bash
-az storage blob delete \
+az storage blob metadata update \
   --account-name "$STORAGE" \
   --container-name documents \
   --name "public/old-policy.pdf" \
+  --metadata IsDeleted=true \
   --auth-mode login
 ```
 
-Then delete its chunks from the index. The simplest way is to rebuild the index from scratch:
-
-```bash
-cd app
-python ingest.py --rebuild
-```
-
-> **Note:** `--rebuild` is not implemented in the current `ingest.py`. Until then, delete orphaned chunks via the Azure portal (AI Search → your index → Search explorer → filter by `file_name`) or use the REST API. A `--rebuild` flag (drop + recreate index, then re-ingest all blobs) is a straightforward addition if needed.
+2. Wait for the next indexer run (or trigger it manually). The indexer removes the document's chunks from the index.
+3. Delete the blob itself once the indexer has processed it.
 
 ### Changing a document's access level
 
-Move it to a different folder prefix. The access level is derived from the folder name at ingest time.
+Move it to a different folder prefix — the access level is derived from the folder name automatically.
 
 ```bash
-# Move from public/ to internal/
+# Copy from public/ to internal/
 az storage blob copy start \
   --account-name "$STORAGE" \
   --destination-container documents \
@@ -320,32 +261,20 @@ az storage blob copy start \
   --source-container documents \
   --auth-mode login
 
-az storage blob delete \
+# Mark the old blob for deletion
+az storage blob metadata update \
   --account-name "$STORAGE" \
   --container-name documents \
   --name "public/policy.pdf" \
+  --metadata IsDeleted=true \
   --auth-mode login
 ```
 
-Then re-run `ingest.py`. The existing chunks under the old path remain until you delete them (see above); the new path gets indexed with the updated access level.
-
-### Automating ingestion
-
-For production, trigger `ingest.py` automatically instead of running it manually:
-
-- **Azure DevOps / GitHub Actions** — run `ingest.py` as a pipeline step after uploading documents
-- **Azure Function** — trigger on `BlobCreated` events from the storage account
-- **Scheduled job** — run nightly via a cron-based pipeline if documents are updated in batch
-
-The pipeline just needs the four environment variables (`AZURE_OPENAI_ENDPOINT`, `AZURE_SEARCH_ENDPOINT`, `AZURE_STORAGE_ACCOUNT`, and appropriate RBAC roles on a service principal or managed identity).
+On the next indexer run, the old chunks are removed and new chunks with the updated access level are created.
 
 ---
 
 ## Company Branding
-
-Aria is designed to be white-labeled. Two inputs control all branding — both are set once and require no code changes.
-
-### Company name
 
 Set `company_name` in `terraform/terraform.tfvars`:
 
@@ -355,30 +284,15 @@ company_name = "Acme Corp"
 
 Run `terraform apply`. The name propagates to the App Service settings immediately — no redeploy needed. It appears in the header, the browser tab title, and the empty-state prompt.
 
-### Logo
-
-Place a logo file in the `branding/` folder at the repo root:
-
-```
-branding/
-  logo.png    # PNG recommended; .svg and .jpg also supported
-```
-
-Run `terraform apply`. Terraform uploads the file to a dedicated public container in your storage account and sets the URL in the App Service settings automatically. The logo replaces the default gem icon in the header. If the file is removed and `terraform apply` is run again, the gem icon returns.
-
-Logo requirements: any size (displayed at 34×34 px in the header); transparent background recommended for PNG/SVG.
-
 ---
 
 ## Going to Production
 
-All upgrade points are marked `# PROD UPGRADE` in `terraform/variables.tf`. Add the relevant variables to your `terraform.tfvars`:
+Use the `terraform/` config. Create `terraform/terraform.tfvars`:
 
 ```hcl
 subscription_id         = "<your-subscription-id>"
 company_name            = "Acme Corp"
-app_service_sku         = "P1v3"
-search_sku              = "standard"
 enable_vnet_integration = true
 ```
 
@@ -426,18 +340,39 @@ Retail USD, Sweden Central. Actual costs depend on usage volume and any EA/reser
 
 ## Variables Reference
 
+Variables common to both configs:
+
 | Variable | Default | Description |
 |---|---|---|
 | `subscription_id` | *(required)* | Azure Subscription ID |
-| `company_name` | `"Contoso"` | Company name shown in the Aria UI |
+| `company_name` | `"Contoso"` | Company name shown in the Aria UI header and empty-state prompt |
 | `prefix` | `"rag"` | Short prefix for all resource names |
 | `location` | `"swedencentral"` | Azure region |
-| `app_service_sku` | `"B1"` | App Service SKU. Prod: `"P1v3"` |
 | `openai_model` | `"gpt-4o"` | Chat model deployment name |
 | `openai_model_version` | `"2024-11-20"` | Chat model version — check the [Azure OpenAI model lifecycle page](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/model-retirements) for retirement dates and update this when a new version is available |
 | `openai_capacity` | `10` | Capacity in K tokens per minute |
-| `search_sku` | `"free"` | AI Search SKU. Prod: `"standard"` |
-| `enable_vnet_integration` | `false` | Enable VNet + private endpoints. Requires P1v3+ |
+| `embedding_model` | `"text-embedding-3-small"` | Embedding model deployment name. Changing this requires updating index dimensions |
+
+`terraform/` only:
+
+| Variable | Default | Description |
+|---|---|---|
+| `app_service_sku` | `"P1v3"` | App Service SKU. P1v3 required for VNet integration |
+| `enable_vnet_integration` | `false` | Enable VNet + private endpoints |
+
+---
+
+> **Security disclaimer — `terraform-free/`**
+>
+> The free config is intentionally cheap and accessible so you can try the app quickly. It comes with security trade-offs you must understand before putting real or sensitive data in:
+>
+> - **Storage account key in Terraform state.** The free AI Search tier has no Managed Identity, so the indexer authenticates to Blob Storage using a connection string (account key). That key is written into your Terraform state file. Anyone with read access to the state has full read/write access to the storage account. The `terraform/` config uses Managed Identity — no key is ever stored.
+>
+> - **API keys active on AI Search.** The free tier cannot disable local authentication, so AI Search API keys exist and are stored in Terraform state. These keys bypass the document access-level filter — anyone holding a key can query all documents regardless of their assigned role. The `terraform/` config sets `local_authentication_enabled = false` so no usable keys exist.
+>
+> - **No private endpoints.** All backend services are reachable over public internet endpoints. Access is gated by RBAC, but credentials obtained from a compromised workload would be exploitable from anywhere.
+>
+> **Summary:** `terraform-free/` is safe for demos, prototypes, and non-sensitive documents. Before loading content that actually matters, use the `terraform/` config and ensure your Terraform state backend has proper access controls.
 
 ---
 
@@ -445,25 +380,36 @@ Retail USD, Sweden Central. Actual costs depend on usage volume and any EA/reser
 
 ```
 azure-rag-foundry/
-├── terraform/
-│   ├── main.tf           # providers, resource group
-│   ├── locals.tf         # naming, logo detection
-│   ├── variables.tf      # all variables — SKU upgrade points marked
-│   ├── network.tf        # VNet, subnets, private DNS zones, private endpoints
-│   ├── ai_services.tf    # Azure OpenAI + model deployments, AI Search
-│   ├── storage.tf        # Storage account, documents container, branding container
-│   ├── compute.tf        # App Service Plan + Web App (Easy Auth, Managed Identity)
-│   ├── security.tf       # App Registration, App Roles, RBAC assignments
+├── terraform/                  # Production config (standard tier, MSI, VNet-ready)
+│   ├── main.tf                 # providers, resource group, IP detection
+│   ├── locals.tf               # naming, network access logic
+│   ├── variables.tf            # variables (app_service_sku, enable_vnet_integration)
+│   ├── network.tf              # VNet, subnets, private DNS zones, private endpoints
+│   ├── ai_services.tf          # Azure OpenAI + model deployments, AI Search (standard)
+│   ├── storage.tf              # Storage account, documents container, sample docs
+│   ├── compute.tf              # App Service Plan + Web App (Easy Auth, Managed Identity)
+│   ├── security.tf             # App Registration, App Roles, RBAC assignments
+│   ├── search_dataplane.tf     # AI Search data plane: index, datasources, skillset, indexers
+│   └── outputs.tf
+├── terraform-free/             # Free-tier config (API keys, no VNet, zero-cost testing)
+│   ├── main.tf
+│   ├── locals.tf
+│   ├── variables.tf
+│   ├── ai_services.tf          # AI Search free tier (API keys, no MSI)
+│   ├── storage.tf
+│   ├── compute.tf
+│   ├── security.tf
+│   ├── search_dataplane.tf     # uses OpenAI API key in skillset (no MSI)
 │   └── outputs.tf
 ├── app/
-│   ├── app.py            # FastAPI: /chat (SSE), /branding, /, /health
-│   ├── ingest.py         # blob → extract → chunk → embed → AI Search index
+│   ├── app.py                  # FastAPI: /chat (SSE), /branding, /, /health
 │   ├── requirements.txt
 │   └── static/
-│       └── index.html    # Aria chat UI
-├── branding/
-│   └── logo.png          # ← drop your company logo here (.svg and .jpg also work)
-└── deploy.sh             # zips app/, reads Terraform outputs, deploys to App Service
+│       └── index.html          # Aria chat UI
+└── sample-docs/
+    ├── public/                 # uploaded automatically by terraform apply
+    ├── internal/
+    └── confidential/
 ```
 
 ---
@@ -492,7 +438,7 @@ The infrastructure changes in [Going to Production](#going-to-production) handle
 - **AI Search replicas** — the Standard S1 SKU supports multiple replicas. Add at least one replica (`replica_count = 2`) for high availability — a single replica has no SLA.
 - **App Service scale-out** — configure auto-scale rules on the App Service Plan (CPU/memory thresholds) so the app handles concurrent users without degrading.
 - **OpenAI capacity (TPM)** — the default is 10K tokens per minute. At GPT-4o rates, that's roughly 5–10 concurrent users before throttling. Increase `openai_capacity` in `terraform.tfvars` based on expected load.
-- **Search index backup** — the index can be fully rebuilt from blob storage by re-running `ingest.py`. Document this as your recovery procedure and keep blob storage as the source of truth.
+- **Search index backup** — the index can be fully rebuilt by deleting and recreating the AI Search data plane resources via `terraform apply`. Blob storage is the source of truth — the indexers rebuild the entire index from it.
 
 ### Monitoring & Cost
 
@@ -502,14 +448,98 @@ The infrastructure changes in [Going to Production](#going-to-production) handle
 
 ### Ongoing Operations
 
-- **Automate ingestion** — a blob-triggered Azure Function is the production-grade replacement for running `ingest.py` manually. Trigger on `BlobCreated` and `BlobModified` events from the `documents` container.
+- **Indexer monitoring** — the indexers run every hour automatically. Set up an alert on AI Search indexer errors in Azure Monitor to catch failures (e.g. embedding quota exceeded, storage access errors) before users notice stale results.
 - **Model version monitoring** — subscribe to Azure OpenAI service announcements or check the [model lifecycle page](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/model-retirements) periodically. Updating the version is a one-line `terraform.tfvars` change — but it's easy to miss the retirement date if nobody is watching.
 - **Offboarding** — define a process for removing role assignments when employees leave. Entra ID group-based access makes this automatic if your HR system drives group membership.
+
+---
+
+## Production Recommendations
+
+### Application Gateway + WAF
+
+For production deployments, consider placing an **Azure Application Gateway with WAF v2**
+in front of the App Service for TLS termination, OWASP ruleset protection, and to remove
+direct public exposure of the App Service.
+
+Most enterprises already have an Application Gateway in their hub network — in that case
+no new gateway resource is needed, only a listener and backend pool pointing at this App
+Service need to be configured there.
+
+### Confluence Integration
+
+If your team uses Confluence, consider building an automation that pulls page content
+via the **Confluence REST API v2** and uploads it as `.md` or `.txt` files into the
+appropriate Blob Storage folder — the indexer handles the rest automatically.
+Possible approaches include a scheduled Azure Function syncing changed pages nightly,
+or a Confluence webhook triggering an upload on page create/update events.
+Store the Confluence API token in Azure Key Vault, not in code.
 
 ---
 
 ## Destroying
 
 ```bash
-terraform -chdir=terraform destroy
+terraform -chdir=terraform-free destroy
+# or: terraform -chdir=terraform destroy
 ```
+
+---
+
+## Quick Deploy — All Commands
+
+**Prerequisites:** Terraform ≥ 1.9, Azure CLI, `zip`
+
+### Free tier (zero-cost testing)
+
+```bash
+# 1. Login
+az login
+az account set --subscription "YOUR_SUBSCRIPTION_ID"
+
+# 2. Check free AI Search quota (only one allowed per subscription)
+az search service list --query "[?sku.name=='free'].{name:name, rg:resourceGroup}" -o table
+
+# 3. Configure
+cat > terraform-free/terraform.tfvars <<EOF
+subscription_id = "YOUR_SUBSCRIPTION_ID"
+company_name    = "Acme Corp"
+EOF
+
+# 4. Deploy everything (~10 min)
+cd terraform-free && terraform init && terraform apply
+
+# 5. Grant admin consent (Entra admin required)
+az ad app permission admin-consent --id $(terraform output -raw entra_app_client_id)
+
+# 6. Open the app
+open $(terraform output -raw app_url)
+```
+
+### Production (standard tier, MSI, VNet-ready)
+
+```bash
+# 1. Login
+az login
+az account set --subscription "YOUR_SUBSCRIPTION_ID"
+
+# 2. Configure
+cat > terraform/terraform.tfvars <<EOF
+subscription_id = "YOUR_SUBSCRIPTION_ID"
+company_name    = "Acme Corp"
+EOF
+
+# 3. Deploy everything (~10 min)
+cd terraform && terraform init && terraform apply
+
+# 4. Grant admin consent (Entra admin required)
+az ad app permission admin-consent --id $(terraform output -raw entra_app_client_id)
+
+# 5. Open the app
+open $(terraform output -raw app_url)
+```
+
+**After opening the app:** assign users to app roles in the portal so they can log in.  
+**Entra ID → Enterprise applications → `rag-rag-<suffix>` → Users and groups → Add assignment**
+
+> Sample documents (one per access tier) are uploaded automatically by `terraform apply`. You can start chatting immediately — no manual uploads needed to test the app.

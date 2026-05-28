@@ -26,7 +26,7 @@ resource "azurerm_service_plan" "main" {
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
   os_type             = "Linux"
-  sku_name            = var.app_service_sku
+  sku_name            = "B1"
 }
 
 resource "azurerm_linux_web_app" "main" {
@@ -36,9 +36,6 @@ resource "azurerm_linux_web_app" "main" {
   service_plan_id     = azurerm_service_plan.main.id
   zip_deploy_file     = data.archive_file.app.output_path
 
-  # PROD: enable VNet integration by setting enable_vnet_integration = true and upgrading app_service_sku to P1v3
-  virtual_network_subnet_id = var.enable_vnet_integration ? azurerm_subnet.app.id : null
-
   identity {
     type = "SystemAssigned"
   }
@@ -47,19 +44,17 @@ resource "azurerm_linux_web_app" "main" {
     application_stack {
       python_version = "3.12"
     }
-    app_command_line      = "python -m uvicorn app:app --host 0.0.0.0 --port 8000"
-    # Routes all outbound traffic through the VNet when VNet integration is active.
-    # Has no effect when enable_vnet_integration = false.
-    vnet_route_all_enabled = var.enable_vnet_integration
+    app_command_line = "python -m uvicorn app:app --host 0.0.0.0 --port 8000"
   }
 
   app_settings = {
-    AZURE_OPENAI_ENDPOINT                    = azurerm_cognitive_account.openai.endpoint
-    AZURE_OPENAI_CHAT_DEPLOYMENT             = azurerm_cognitive_deployment.chat.name
-    AZURE_OPENAI_EMBEDDING_DEPLOYMENT        = azurerm_cognitive_deployment.embedding.name
-    AZURE_SEARCH_ENDPOINT                    = "https://${azurerm_search_service.main.name}.search.windows.net"
-    AZURE_STORAGE_ACCOUNT                    = azurerm_storage_account.main.name
-    AZURE_SEARCH_SEMANTIC_ENABLED            = "true"
+    AZURE_OPENAI_ENDPOINT             = azurerm_cognitive_account.openai.endpoint
+    AZURE_OPENAI_CHAT_DEPLOYMENT      = azurerm_cognitive_deployment.chat.name
+    AZURE_OPENAI_EMBEDDING_DEPLOYMENT = azurerm_cognitive_deployment.embedding.name
+    AZURE_SEARCH_ENDPOINT             = "https://${azurerm_search_service.main.name}.search.windows.net"
+    AZURE_SEARCH_API_KEY              = azurerm_search_service.main.primary_key
+    AZURE_STORAGE_ACCOUNT             = azurerm_storage_account.main.name
+    AZURE_SEARCH_SEMANTIC_ENABLED     = "false"
     APPLICATIONINSIGHTS_CONNECTION_STRING    = azurerm_application_insights.main.connection_string
     MICROSOFT_PROVIDER_AUTHENTICATION_SECRET = azuread_application_password.easy_auth.value
     SCM_DO_BUILD_DURING_DEPLOYMENT           = "true"

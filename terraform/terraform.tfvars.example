@@ -1,0 +1,7 @@
+subscription_id = "00000000-0000-0000-0000-000000000000"
+company_name    = "Acme Corp"
+
+# Uncomment and adjust to override defaults (see variables.tf for all options):
+# app_service_sku         = "P1v3"   # default: "P1v3" — P1v3 required for VNet integration
+# enable_vnet_integration = true     # default: false   — requires P1v3+
+# openai_capacity         = 30       # default: 10 (10K TPM)

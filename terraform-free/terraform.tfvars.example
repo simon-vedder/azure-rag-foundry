@@ -1,0 +1,5 @@
+subscription_id = "00000000-0000-0000-0000-000000000000"
+company_name    = "Acme Corp"
+
+# Uncomment and adjust to override defaults (see variables.tf for all options):
+# openai_capacity = 30   # default: 10 (10K TPM)

@@ -5,21 +5,10 @@ resource "azurerm_storage_account" "main" {
   account_tier             = "Standard"
   account_replication_type = "LRS"
 
-  # Storage always stays publicly accessible but IP-restricted when VNet integration is on.
-  # AzureServices bypass keeps the AI Search indexer working without a shared private link.
   public_network_access_enabled   = true
   allow_nested_items_to_be_public = false
   https_traffic_only_enabled      = true
   min_tls_version                 = "TLS1_2"
-
-  dynamic "network_rules" {
-    for_each = local.storage_network_rules_enabled ? [1] : []
-    content {
-      default_action = "Deny"
-      ip_rules       = local.storage_allowed_ips
-      bypass         = ["AzureServices"]
-    }
-  }
 }
 
 resource "azurerm_storage_container" "documents" {
@@ -49,4 +38,3 @@ resource "azurerm_storage_blob" "sample_docs" {
   source                 = each.value
   content_type           = "text/plain"
 }
-

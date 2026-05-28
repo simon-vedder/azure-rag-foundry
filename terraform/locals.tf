@@ -22,25 +22,24 @@ locals {
 
   app_url = "https://${local.app_name}.azurewebsites.net"
 
-  # Private endpoints and public-access disabling are only applied when VNet integration is enabled.
-  # In test (B1): App Service reaches backend via public endpoints using Managed Identity RBAC.
-  # In prod (P1v3 + enable_vnet_integration=true): private endpoints + public access disabled.
-  create_search_pe      = var.enable_vnet_integration && var.search_sku != "free"
-  backend_public_access = !var.enable_vnet_integration
-  search_public_access  = var.search_sku == "free" ? true : !var.enable_vnet_integration
+  # Public access logic:
+  # - No VNet integration: all backends publicly accessible (development mode).
+  # - VNet integration + client IP detected: AI Search stays public but restricted to that IP,
+  #   allowing terraform apply to manage data plane resources from the local machine.
+  #   Other backends (OpenAI, Storage) are fully locked down via private endpoints.
+  # - VNet integration + no client IP: all backends fully locked down (pipeline/jump box required).
+  client_ip        = trimspace(data.http.my_ip.response_body)
+  create_search_pe = var.enable_vnet_integration
+  # AI Search public access is always enabled — access control is handled by IP firewall rules
+  # (search_allowed_ips) when VNet integration is active, rather than fully disabling public access.
+  # This allows terraform apply to manage data plane resources from the local machine in all modes.
+  search_public_access = true
+  search_allowed_ips   = var.enable_vnet_integration ? [local.client_ip] : []
 
-  # Branding — detect logo file in repo root branding/ folder (png > svg > jpg)
-  logo_path = (
-    fileexists("${path.module}/../branding/logo.png") ? "${path.module}/../branding/logo.png" :
-    fileexists("${path.module}/../branding/logo.svg") ? "${path.module}/../branding/logo.svg" :
-    fileexists("${path.module}/../branding/logo.jpg") ? "${path.module}/../branding/logo.jpg" :
-    ""
-  )
-  logo_name = local.logo_path != "" ? basename(local.logo_path) : ""
-  logo_content_type = (
-    endswith(local.logo_name, ".svg") ? "image/svg+xml" :
-    endswith(local.logo_name, ".jpg") ? "image/jpeg" :
-    "image/png"
-  )
-  branding_logo_url = local.logo_name != "" ? "https://${local.st_name}.blob.core.windows.net/branding/${local.logo_name}" : ""
+  # Storage uses network rules (IP restriction + AzureServices bypass) instead of fully disabling
+  # public access. This allows terraform apply to upload sample docs and lets the AI Search indexer
+  # reach the storage account via the trusted Azure services bypass.
+  storage_network_rules_enabled = var.enable_vnet_integration
+  storage_allowed_ips           = var.enable_vnet_integration ? [local.client_ip] : []
+
 }
