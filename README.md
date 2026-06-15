@@ -151,7 +151,7 @@ CLIENT_ID=$(terraform -chdir=terraform-free output -raw entra_app_client_id)
 az ad app permission admin-consent --id "$CLIENT_ID"
 ```
 
-Or in the portal: **Entra ID → App registrations → `rag-rag-<suffix>` → API permissions → Grant admin consent**.
+Or in the portal: **Entra ID → App registrations → `rag-auth-<suffix>` → API permissions → Grant admin consent**.
 
 ### 6. Give users access
 
@@ -183,7 +183,7 @@ The app role lands in the member's token automatically, so the search filter jus
 direct group members get the role — nested groups aren't honored.)
 
 **Manual alternative.** Set `create_role_groups = false` and assign roles directly:
-**Entra ID → Enterprise applications → `rag-rag-<suffix>` → Users and groups → Add user/group**.
+**Entra ID → Enterprise applications → `rag-auth-<suffix>` → Users and groups → Add user/group**.
 
 ### 7. Upload your own documents (optional)
 
@@ -605,6 +605,6 @@ open $(terraform output -raw app_url)
 ```
 
 **After opening the app:** assign users to app roles in the portal so they can log in.  
-**Entra ID → Enterprise applications → `rag-rag-<suffix>` → Users and groups → Add assignment**
+**Entra ID → Enterprise applications → `rag-auth-<suffix>` → Users and groups → Add assignment**
 
 > Sample documents (one per access tier) are uploaded automatically by `terraform apply`. You can start chatting immediately — no manual uploads needed to test the app.
