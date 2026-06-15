@@ -27,6 +27,7 @@ Two Terraform configs are included:
   - [6. Assign app roles to users](#6-assign-app-roles-to-users)
   - [7. Upload documents](#7-upload-documents)
   - [8. Open the app](#8-open-the-app)
+- [Adding a Department (Topic)](#adding-a-department-topic)
 - [Managing the Knowledge Base](#managing-the-knowledge-base)
   - [Adding or updating documents](#adding-or-updating-documents)
   - [Deleting documents](#deleting-documents)
@@ -234,6 +235,59 @@ terraform -chdir=terraform-free output -raw app_url
 
 The landing page (`/`) shows a card for each topic you can access. Pick one to chat; if you can access
 exactly one topic you're taken straight into it.
+
+---
+
+## Adding a Department (Topic)
+
+A "department" is a **topic** — a department-scoped chatbot over the shared infrastructure. Each topic
+gets its own document folder, generated Entra app roles and access groups, landing-page card, chat page
+at `/t/<slug>`, and AI Search filter scoping. A role for one topic can **never** retrieve another topic's
+content — that isolation is the security boundary, enforced in `build_search_filter` (`app/access.py`).
+
+The `topics` map in `terraform.tfvars` is the single source of truth. Adding a department is one entry
+plus `terraform apply` — no application code changes.
+
+**1. Add the topic** — a `slug => display name` entry in `terraform/terraform.tfvars` (or `terraform-free/`):
+
+```hcl
+topics = {
+  hr      = "HR"
+  it      = "IT"
+  finance = "Finance"   # ← new department
+}
+```
+
+Slug rules: 2–24 lowercase alphanumeric characters. The slug becomes the URL (`/t/finance`), the blob
+folder, and the role prefix (`finance.Internal.Read`, `finance.Content.Admin`, …).
+
+**2. Apply** — `terraform -chdir=terraform apply`. A single apply:
+
+- mints the Entra app roles for the new topic across every configured tier
+  (`finance.General.Read`, `finance.Internal.Read`, `finance.Content.Admin`)
+- creates the auto-provisioned Entra **access groups** so you assign people to a group, not individually
+  (requires Entra ID P1+; see [Going to Production](#going-to-production))
+- adds the landing-page card and the `/t/finance` chat page
+- updates the `TOPICS` app setting; the server picks it up with no redeploy
+
+**3. Grant admin consent again** — new app roles require re-consent. Re-run the
+[Grant admin consent](#5-grant-admin-consent-entra-admin-required) step.
+
+**4. Add documents** — blob layout is `<slug>/<tier>/<file>`, with `topic` and `access_level` metadata
+(the metadata is what the indexer projects into the index). Either seed them through Terraform by dropping
+files in `sample-docs/finance/general/…` (uploaded on apply), or use the in-app
+[document manager](#option-a--the-built-in-document-manager-recommended) once a user holds
+`finance.Content.Admin`.
+
+**5. Assign users** — Entra ID → Enterprise applications → `rag-auth-<suffix>` → **Users and groups** →
+add people to the generated `finance` group for the tier they need. Base-tier (`general`) visibility
+depends on `public_tier_mode`: the default `all_users` lets every authenticated employee see `general`
+docs without a role; `role_required` hides the topic entirely until a role is assigned.
+
+> **Tiers** are the sensitivity axis, configured separately via the `tiers` variable (default
+> `["general", "internal"]`, most-open first). The `sample-docs/` tree also ships `confidential/`
+> folders — to activate that third tier, set `tiers = ["general", "internal", "confidential"]`, otherwise
+> files under unconfigured tiers are skipped on upload.
 
 ---
 
