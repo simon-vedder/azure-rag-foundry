@@ -1,0 +1,50 @@
+Contoso Technologies — Employee Handbook (INTERNAL)
+====================================================
+Classification: INTERNAL — Employees only, do not share externally
+Owner: People & Culture | Last updated: May 2026
+
+This handbook expands on the public HR overview with the policies employees are
+expected to follow. It is for internal use only.
+
+1. Code of Conduct
+------------------
+- Treat colleagues, customers, and partners with respect; harassment of any kind is
+  grounds for disciplinary action up to termination.
+- Conflicts of interest (side employment, board seats, supplier relationships) must be
+  declared to your manager and HR before they arise.
+- Insider information must never be used for personal trading (see the Confidential
+  compensation/M&A material restrictions held by Legal).
+
+2. Performance and Reviews
+--------------------------
+- Two formal review cycles per year: mid-year (June) and annual (December).
+- Ratings: Exceeds / Meets / Developing / Below. Below requires a documented
+  improvement plan with HR involvement.
+- Promotions are calibrated across teams in the December cycle. Managers submit cases
+  via the HR portal by November 15.
+
+3. Remote and Hybrid Work
+-------------------------
+- Anchor days are agreed per team; exceptions for caregiving and medical needs.
+- Cross-border remote work beyond 20 working days/year requires HR + Tax review
+  (permanent establishment and social security implications).
+
+4. Expenses and Travel
+----------------------
+- Economy class for flights under 4 hours; premium economy permitted above that.
+- Per diems: Sweden €70, Germany €60, UK €75, Singapore €65.
+- Submit expenses within 30 days via the finance portal; manager approval required.
+
+5. Leave Details
+----------------
+- Carryover: up to 5 unused vacation days roll into the next year (Sweden); use-by March 31.
+- Sabbatical: eligible after 5 years of service, up to 3 months unpaid, subject to approval.
+- Bereavement: up to 5 paid days for immediate family.
+
+6. Leaving Contoso
+------------------
+- Notice periods follow local law and your contract (typically 1–3 months).
+- Offboarding checklist: return devices to IT, knowledge handover, exit interview with HR.
+- Stock options follow the rules in your grant agreement; HR Confidential holds the detail.
+
+Questions about this handbook: people@contoso-tech.internal

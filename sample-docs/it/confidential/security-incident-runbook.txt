@@ -1,0 +1,56 @@
+Contoso Technologies — Security Incident Runbook (CONFIDENTIAL)
+===============================================================
+Classification: CONFIDENTIAL — Security team and IT Confidential Reader only
+Owner: Security Operations (SecOps) | Date: April 2026
+
+This runbook describes how Contoso responds to security incidents, including contact
+details and escalation paths. Unauthorised disclosure weakens our defences — treat as
+strictly confidential.
+
+1. Severity Definitions
+-----------------------
+  SEV1  Active breach, data exfiltration, or ransomware. Business-critical.
+  SEV2  Confirmed compromise of a single account or host, contained.
+  SEV3  Suspicious activity under investigation, no confirmed compromise.
+
+2. Immediate Actions (first 30 minutes)
+---------------------------------------
+- Declare the incident in #sec-incident (Teams) and page the on-call SecOps lead.
+- For SEV1: open a bridge call, assign an Incident Commander, start the incident log.
+- Contain first, investigate second: isolate affected hosts via Intune, disable
+  compromised accounts in Entra ID, rotate exposed credentials.
+
+3. Key Contacts (do not distribute)
+-----------------------------------
+  Role                     Contact
+  CISO                     security-lead@contoso-tech.internal / +46 8 555 0190
+  SecOps on-call           pager via help.contoso-tech.internal/oncall
+  Legal (breach counsel)   legal@contoso-tech.internal
+  Comms (external)         press@contoso-tech.example (CEO sign-off required)
+  Cyber insurance          Policy #CT-CYB-2026-04 (broker: Marsh)
+
+4. Credential and Secret Handling
+---------------------------------
+- Production secrets live in Azure Key Vault; never in code or chat.
+- On suspected exposure, rotate immediately and audit access logs for the secret.
+- Break-glass admin account credentials are sealed; use requires CISO authorisation and
+  triggers an automatic alert to the security distribution list.
+
+5. Forensics and Evidence
+-------------------------
+- Preserve logs before remediation where feasible (snapshot VMs, export sign-in logs).
+- Chain of custody documented in the incident log; do not alter source evidence.
+
+6. Regulatory Notification
+--------------------------
+- GDPR personal-data breach: assess within 24 hours; notify the supervisory authority
+  within 72 hours of becoming aware if there is risk to individuals. Legal leads this.
+- Customer notification per contractual SLAs; Comms + Legal approve all external wording.
+
+7. Post-Incident
+----------------
+- Blameless post-mortem within 5 business days; track remediation items to closure.
+- Update detections and this runbook with lessons learned.
+
+This document must not be printed or stored outside approved systems.
+Questions: security-lead@contoso-tech.internal

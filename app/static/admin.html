@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aria — Document manager</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --accent: #6366f1; --accent-dark: #4f46e5; --accent-light: #eef2ff;
+      --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0;
+      --text: #0f172a; --text-muted: #64748b; --header-bg: #0f172a;
+      --danger: #dc2626;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); min-height: 100vh; display: flex; flex-direction: column; color: var(--text); font-size: 15px; line-height: 1.6; }
+    header { background: var(--header-bg); height: 60px; padding: 0 24px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .logo-icon { width: 34px; height: 34px; }
+    .brand-name { font-size: 1.05rem; font-weight: 700; color: #fff; }
+    .brand-name .sep { color: rgba(255,255,255,0.3); margin: 0 7px; font-weight: 400; }
+    .hbtn { margin-left: auto; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); color: rgba(255,255,255,0.7); padding: 6px 16px; border-radius: 7px; text-decoration: none; font-size: 0.82rem; }
+    .hbtn:hover { background: rgba(255,255,255,0.13); color: #fff; }
+    main { flex: 1; max-width: 880px; width: 100%; margin: 0 auto; padding: 36px 24px; }
+    h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+    .sub { color: var(--text-muted); margin-top: 4px; margin-bottom: 24px; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    label { font-size: 0.82rem; font-weight: 600; color: var(--text-muted); }
+    select, input[type=file] { font-family: inherit; font-size: 0.9rem; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); }
+    .btn { font-family: inherit; font-size: 0.88rem; font-weight: 600; padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; background: var(--accent); color: #fff; transition: background 0.15s; }
+    .btn:hover:not(:disabled) { background: var(--accent-dark); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn.ghost { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+    .btn.ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px; margin-top: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .card h2 { font-size: 1rem; font-weight: 700; margin-bottom: 14px; }
+    .tier { margin-top: 18px; }
+    .tier:first-child { margin-top: 0; }
+    .tier-name { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+    .doc { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .doc:last-child { border-bottom: none; }
+    .doc-name { flex: 1; font-size: 0.9rem; word-break: break-all; }
+    .doc-meta { font-size: 0.78rem; color: var(--text-muted); }
+    .doc-del { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 0.82rem; font-family: inherit; padding: 4px 8px; border-radius: 6px; }
+    .doc-del:hover { background: #fef2f2; }
+    .muted { color: var(--text-muted); font-size: 0.88rem; }
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--text); color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 0.86rem; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+    .toast.show { opacity: 1; }
+    .toast.err { background: var(--danger); }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="logo" href="/">
+      <svg class="logo-icon" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="17,3 31,17 17,31 3,17" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="1"/>
+        <polygon points="17,7 28,17 17,27 6,17" fill="rgba(99,102,241,0.55)"/>
+        <polygon points="17,7 28,17 17,17" fill="rgba(139,92,246,0.75)"/>
+        <polygon points="17,7 17,17 6,17" fill="rgba(99,102,241,0.85)"/>
+        <circle cx="17" cy="17" r="2.6" fill="white" opacity="0.9"/>
+      </svg>
+      <span class="brand-name">Aria<span class="sep">·</span>Documents</span>
+    </a>
+    <a class="hbtn" href="/">Back to topics</a>
+  </header>
+
+  <main>
+    <h1>Document manager</h1>
+    <p class="sub">Upload, remove, and reindex documents for the topics you administer.</p>
+
+    <div class="row">
+      <label for="topic-select">Topic</label>
+      <select id="topic-select"></select>
+      <button class="btn ghost" id="reindex-btn" disabled>Reindex now</button>
+    </div>
+
+    <div class="card" id="upload-card" style="display:none">
+      <h2>Upload a document</h2>
+      <div class="row">
+        <label for="tier-select">Access level</label>
+        <select id="tier-select"></select>
+        <input type="file" id="file-input">
+        <button class="btn" id="upload-btn">Upload</button>
+      </div>
+      <p class="muted" style="margin-top:10px">The file is stored under the selected topic and access level. Reindex to make it searchable.</p>
+    </div>
+
+    <div class="card" id="docs-card" style="display:none">
+      <h2>Documents</h2>
+      <div id="docs"></div>
+    </div>
+
+    <div id="state" class="muted" style="margin-top:24px">Loading…</div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const topicSelect = document.getElementById('topic-select');
+    const tierSelect = document.getElementById('tier-select');
+    const fileInput = document.getElementById('file-input');
+    const uploadBtn = document.getElementById('upload-btn');
+    const reindexBtn = document.getElementById('reindex-btn');
+    const docsEl = document.getElementById('docs');
+    const stateEl = document.getElementById('state');
+    let TIERS = [];
+
+    function esc(t) { return (t || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function toast(msg, isErr) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.className = 'toast show' + (isErr ? ' err' : '');
+      setTimeout(() => { t.className = 'toast'; }, 2600);
+    }
+    function fmtSize(n) { return n < 1024 ? n + ' B' : n < 1048576 ? (n/1024).toFixed(1) + ' KB' : (n/1048576).toFixed(1) + ' MB'; }
+
+    (async () => {
+      try {
+        const data = await fetch('/api/admin/topics').then(r => r.json());
+        TIERS = data.tiers || [];
+        const topics = data.topics || [];
+        if (!topics.length) { stateEl.textContent = 'You don’t administer any topics.'; return; }
+        for (const t of topics) {
+          const o = document.createElement('option'); o.value = t.slug; o.textContent = t.display; topicSelect.appendChild(o);
+        }
+        for (const tier of TIERS) {
+          const o = document.createElement('option'); o.value = tier; o.textContent = tier; tierSelect.appendChild(o);
+        }
+        document.getElementById('upload-card').style.display = '';
+        document.getElementById('docs-card').style.display = '';
+        reindexBtn.disabled = false;
+        stateEl.style.display = 'none';
+        await loadDocs();
+      } catch (_) { stateEl.textContent = 'Could not load the document manager.'; }
+    })();
+
+    async function loadDocs() {
+      const topic = topicSelect.value;
+      docsEl.innerHTML = '<p class="muted">Loading…</p>';
+      try {
+        const data = await fetch('/api/admin/documents?topic=' + encodeURIComponent(topic)).then(r => r.json());
+        const docs = data.documents || [];
+        if (!docs.length) { docsEl.innerHTML = '<p class="muted">No documents yet.</p>'; return; }
+        const byTier = {};
+        for (const d of docs) (byTier[d.access_level] = byTier[d.access_level] || []).push(d);
+        docsEl.innerHTML = '';
+        for (const tier of TIERS) {
+          const list = byTier[tier]; if (!list) continue;
+          const wrap = document.createElement('div'); wrap.className = 'tier';
+          wrap.innerHTML = `<div class="tier-name">${esc(tier)}</div>`;
+          for (const d of list) {
+            const row = document.createElement('div'); row.className = 'doc';
+            row.innerHTML = `<span class="doc-name">${esc(d.file_name)}</span>
+              <span class="doc-meta">${fmtSize(d.size)}</span>
+              <button class="doc-del">Delete</button>`;
+            row.querySelector('.doc-del').addEventListener('click', () => deleteDoc(topic, d.path, d.file_name));
+            wrap.appendChild(row);
+          }
+          docsEl.appendChild(wrap);
+        }
+      } catch (_) { docsEl.innerHTML = '<p class="muted">Could not load documents.</p>'; }
+    }
+
+    async function deleteDoc(topic, path, name) {
+      if (!confirm(`Delete "${name}"? It will be removed from search on the next reindex.`)) return;
+      try {
+        const res = await fetch(`/api/admin/documents?topic=${encodeURIComponent(topic)}&path=${encodeURIComponent(path)}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        toast('Deleted. Reindex to update search.');
+        await loadDocs();
+      } catch (e) { toast('Delete failed', true); }
+    }
+
+    uploadBtn.addEventListener('click', async () => {
+      const file = fileInput.files[0];
+      if (!file) { toast('Choose a file first', true); return; }
+      const fd = new FormData();
+      fd.append('topic', topicSelect.value);
+      fd.append('access_level', tierSelect.value);
+      fd.append('file', file);
+      uploadBtn.disabled = true;
+      try {
+        const res = await fetch('/api/admin/documents', { method: 'POST', body: fd });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        toast('Uploaded. Reindex to make it searchable.');
+        fileInput.value = '';
+        await loadDocs();
+      } catch (e) { toast('Upload failed', true); }
+      finally { uploadBtn.disabled = false; }
+    });
+
+    reindexBtn.addEventListener('click', async () => {
+      reindexBtn.disabled = true;
+      try {
+        const fd = new FormData(); fd.append('topic', topicSelect.value);
+        const res = await fetch('/api/admin/reindex', { method: 'POST', body: fd });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        toast('Reindexing started.');
+      } catch (e) { toast('Could not start reindexing', true); }
+      finally { reindexBtn.disabled = false; }
+    });
+
+    topicSelect.addEventListener('change', loadDocs);
+  </script>
+</body>
+</html>

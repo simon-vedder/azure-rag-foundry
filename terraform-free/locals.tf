@@ -4,9 +4,6 @@ resource "random_string" "suffix" {
   special = false
 }
 
-resource "random_uuid" "internal_read_role" {}
-resource "random_uuid" "confidential_read_role" {}
-
 locals {
   suffix         = random_string.suffix.result
   rg_name        = "${var.prefix}-rag-rg-${local.suffix}"
@@ -17,6 +14,7 @@ locals {
   app_name       = "${var.prefix}-app-${local.suffix}"
   law_name       = "${var.prefix}-law-${local.suffix}"
   appi_name      = "${var.prefix}-appi-${local.suffix}"
+  uami_name      = "${var.prefix}-id-${local.suffix}" # Easy Auth federated-credential identity
   entra_app_name = "${var.prefix}-rag-${local.suffix}"
 
   app_url = "https://${local.app_name}.azurewebsites.net"

@@ -1,57 +1,25 @@
-resource "azurerm_cognitive_account" "openai" {
-  name                  = local.oai_name
-  location              = azurerm_resource_group.main.location
-  resource_group_name   = azurerm_resource_group.main.name
-  kind                  = "OpenAI"
-  sku_name              = "S0"
-  custom_subdomain_name = local.oai_name
+# Azure OpenAI + AI Search (free tier).
+#
+# Free-tier Search cannot disable local auth and has no managed identity, so everything
+# downstream authenticates with keys: the data plane uses the admin key, the embedding skill uses
+# the OpenAI key, and the indexer's datasource uses the storage connection string. Semantic ranking
+# is not available on the free tier, so it stays disabled.
+module "ai" {
+  source = "../modules/ai"
 
-  public_network_access_enabled = true
-}
-
-resource "azurerm_cognitive_deployment" "chat" {
-  name                 = var.openai_model
-  cognitive_account_id = azurerm_cognitive_account.openai.id
-
-  model {
-    format  = "OpenAI"
-    name    = var.openai_model
-    version = var.openai_model_version
-  }
-
-  sku {
-    name     = "GlobalStandard"
-    capacity = var.openai_capacity
-  }
-}
-
-resource "azurerm_cognitive_deployment" "embedding" {
-  name                 = "text-embedding-3-small"
-  cognitive_account_id = azurerm_cognitive_account.openai.id
-
-  model {
-    format  = "OpenAI"
-    name    = "text-embedding-3-small"
-    version = "1"
-  }
-
-  sku {
-    name     = "GlobalStandard"
-    capacity = 10
-  }
-}
-
-resource "azurerm_search_service" "main" {
-  name                = local.srch_name
+  openai_name         = local.oai_name
+  search_name         = local.srch_name
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_resource_group.main.location
-  sku                 = "free"
 
-  public_network_access_enabled = true
+  openai_model         = var.openai_model
+  openai_model_version = var.openai_model_version
+  openai_capacity      = var.openai_capacity
+  embedding_model      = var.embedding_model
 
-  # Free tier requires local auth (API keys) — RBAC data plane is not supported.
-  local_authentication_enabled = true
-
-  replica_count   = 1
-  partition_count = 1
+  search_sku                   = "free"
+  search_local_auth_enabled    = true  # free tier cannot disable API keys
+  search_identity_enabled      = false # no managed identity on the free tier
+  search_public_network_access = true
+  semantic_search_sku          = null # semantic ranker unavailable on the free tier
 }

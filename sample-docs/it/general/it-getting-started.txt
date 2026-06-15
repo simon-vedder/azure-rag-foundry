@@ -1,0 +1,42 @@
+Contoso Technologies — IT Getting Started
+==========================================
+Classification: GENERAL — Visible to all employees
+
+This guide covers how to get IT help and the basics every employee needs. Anyone in
+the company can read it.
+
+Reaching IT support
+--------------------
+- Service desk portal: https://help.contoso-tech.internal
+- Email: ithelp@contoso-tech.internal
+- Chat: #it-help in Microsoft Teams
+- Support hours: 08:00–18:00 CET, Mon–Fri. After-hours P1 outages: on-call pager via the portal.
+
+Your accounts
+-------------
+- Single sign-on with your Contoso Entra ID account covers email, Teams, the ERP, and
+  most internal apps. Use it everywhere rather than creating separate logins.
+- Multi-factor authentication is mandatory. Set up the Microsoft Authenticator app on day one.
+- Forgot your password? Use the self-service reset at https://aka.ms/sspr before contacting IT.
+
+Devices
+-------
+- New joiners receive a laptop (MacBook or ThinkPad) preconfigured by IT.
+- Encryption (FileVault / BitLocker) is enabled by default — do not disable it.
+- Report lost or stolen devices immediately to ithelp@contoso-tech.internal so we can wipe them.
+
+Common requests
+---------------
+- Software installation: request via the portal; pre-approved apps install automatically.
+- Access to a shared mailbox, Teams site, or ERP module: raise an access request; your
+  manager approves it.
+- Guest/visitor Wi-Fi: self-service vouchers at the reception kiosk.
+
+Security basics
+--------------
+- Never share your password or MFA codes; IT will never ask for them.
+- Report suspicious emails with the "Report Phishing" button in Outlook.
+- Lock your screen when you step away (Win+L / Ctrl+Cmd+Q).
+
+Internal system details (VPN, network, system inventory) require the IT Internal Reader
+role. Incident-response runbooks are restricted to the IT Confidential Reader role.

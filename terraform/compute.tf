@@ -1,95 +1,44 @@
-data "archive_file" "app" {
-  type        = "zip"
-  source_dir  = "${path.module}/../app"
-  output_path = "${path.module}/../deploy.zip"
-  excludes    = ["__pycache__", ".env"]
-}
+module "app" {
+  source = "../modules/app"
 
-resource "azurerm_log_analytics_workspace" "main" {
-  name                = local.law_name
-  location            = azurerm_resource_group.main.location
+  app_name            = local.app_name
+  plan_name           = local.asp_name
+  log_analytics_name  = local.law_name
+  app_insights_name   = local.appi_name
   resource_group_name = azurerm_resource_group.main.name
-  sku                 = "PerGB2018"
-  retention_in_days   = 30
-}
-
-resource "azurerm_application_insights" "main" {
-  name                = local.appi_name
   location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
-  workspace_id        = azurerm_log_analytics_workspace.main.id
-  application_type    = "web"
-}
-
-resource "azurerm_service_plan" "main" {
-  name                = local.asp_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
-  os_type             = "Linux"
   sku_name            = var.app_service_sku
-}
 
-resource "azurerm_linux_web_app" "main" {
-  name                = local.app_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
-  service_plan_id     = azurerm_service_plan.main.id
-  zip_deploy_file     = data.archive_file.app.output_path
+  source_dir      = "${path.module}/../app"
+  zip_output_path = "${path.module}/../deploy.zip"
 
-  # PROD: enable VNet integration by setting enable_vnet_integration = true and upgrading app_service_sku to P1v3
-  virtual_network_subnet_id = var.enable_vnet_integration ? azurerm_subnet.app.id : null
+  vnet_subnet_id = var.enable_vnet_integration ? azurerm_subnet.app.id : null
 
-  identity {
-    type = "SystemAssigned"
-  }
+  auth_client_id = module.identity.client_id
+  auth_tenant_id = data.azuread_client_config.current.tenant_id
 
-  site_config {
-    application_stack {
-      python_version = "3.12"
-    }
-    app_command_line      = "python -m uvicorn app:app --host 0.0.0.0 --port 8000"
-    # Routes all outbound traffic through the VNet when VNet integration is active.
-    # Has no effect when enable_vnet_integration = false.
-    vnet_route_all_enabled = var.enable_vnet_integration
-  }
+  # Secretless Easy Auth: attach the federated-credential identity and point Easy Auth at the MI
+  # override setting (its value is the identity's client id) instead of a client secret.
+  user_assigned_identity_id       = azurerm_user_assigned_identity.easy_auth.id
+  auth_client_secret_setting_name = "OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID"
+  sticky_app_setting_names        = ["OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID"]
 
   app_settings = {
-    AZURE_OPENAI_ENDPOINT                    = azurerm_cognitive_account.openai.endpoint
-    AZURE_OPENAI_CHAT_DEPLOYMENT             = azurerm_cognitive_deployment.chat.name
-    AZURE_OPENAI_EMBEDDING_DEPLOYMENT        = azurerm_cognitive_deployment.embedding.name
-    AZURE_SEARCH_ENDPOINT                    = "https://${azurerm_search_service.main.name}.search.windows.net"
-    AZURE_STORAGE_ACCOUNT                    = azurerm_storage_account.main.name
-    AZURE_SEARCH_SEMANTIC_ENABLED            = "true"
-    APPLICATIONINSIGHTS_CONNECTION_STRING    = azurerm_application_insights.main.connection_string
-    MICROSOFT_PROVIDER_AUTHENTICATION_SECRET = azuread_application_password.easy_auth.value
-    SCM_DO_BUILD_DURING_DEPLOYMENT           = "true"
-    WEBSITES_PORT                            = "8000"
-    COMPANY_NAME                             = var.company_name
-  }
+    AZURE_OPENAI_ENDPOINT             = module.ai.openai_endpoint
+    AZURE_OPENAI_CHAT_DEPLOYMENT      = module.ai.chat_deployment_name
+    AZURE_OPENAI_EMBEDDING_DEPLOYMENT = module.ai.embedding_deployment_name
+    AZURE_SEARCH_ENDPOINT             = module.ai.search_endpoint
+    AZURE_SEARCH_INDEX                = module.search_dataplane.index_name
+    AZURE_SEARCH_INDEXER              = module.search_dataplane.indexer_name
+    AZURE_SEARCH_SEMANTIC_ENABLED     = "true"
+    AZURE_STORAGE_ACCOUNT             = module.storage.name
+    DOCUMENTS_CONTAINER               = module.storage.container_name
+    COMPANY_NAME                      = var.company_name
+    TOPICS                            = jsonencode(var.topics)
+    TIERS                             = jsonencode(var.tiers)
+    PUBLIC_TIER_MODE                  = var.public_tier_mode
 
-  auth_settings_v2 {
-    auth_enabled           = true
-    unauthenticated_action = "RedirectToLoginPage"
-    default_provider       = "azureactivedirectory"
-
-    active_directory_v2 {
-      client_id                  = azuread_application.main.client_id
-      tenant_auth_endpoint       = "https://login.microsoftonline.com/${data.azuread_client_config.current.tenant_id}/v2.0"
-      client_secret_setting_name = "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET"
-      allowed_audiences          = [azuread_application.main.client_id]
-    }
-
-    login {
-      token_store_enabled = true
-    }
-  }
-
-  logs {
-    http_logs {
-      file_system {
-        retention_in_days = 7
-        retention_in_mb   = 35
-      }
-    }
+    # Easy Auth reads this (the federated-credential identity's client id) in place of a secret.
+    OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID = azurerm_user_assigned_identity.easy_auth.client_id
   }
 }

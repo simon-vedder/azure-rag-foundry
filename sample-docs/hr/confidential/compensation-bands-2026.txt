@@ -1,0 +1,44 @@
+Contoso Technologies — Compensation Bands FY2026 (CONFIDENTIAL)
+================================================================
+Classification: CONFIDENTIAL — HR leadership and managers with HR Confidential Reader only
+Prepared by: People & Culture, Total Rewards | Date: April 2026
+
+This document contains salary banding and executive compensation data. Unauthorised
+disclosure is a serious breach of the confidentiality policy.
+
+Salary Bands (Annual base, EUR, Stockholm reference; apply local market factors)
+--------------------------------------------------------------------------------
+  Band    Role examples                         Min        Mid        Max
+  L1      Associate / Junior                    38,000     46,000     54,000
+  L2      Engineer / Specialist                 54,000     66,000     78,000
+  L3      Senior Engineer / Senior Specialist   78,000     92,000    106,000
+  L4      Staff / Lead / Manager               106,000    124,000    142,000
+  L5      Principal / Senior Manager           142,000    165,000    188,000
+  L6      Director                             188,000    215,000    245,000
+
+Geographic factors (applied to the Stockholm reference)
+-------------------------------------------------------
+  Berlin: 0.95   London: 1.10   Singapore: 0.90
+
+Short-Term Incentive (STIP) target % of base
+--------------------------------------------
+  L1–L2: 8%    L3: 12%    L4: 18%    L5: 25%    L6: 35%
+
+Executive Compensation (FY2026, annual base EUR)
+------------------------------------------------
+  CEO — Maria Lindqvist:         480,000
+  CFO — Anna Eriksson:           360,000
+  CTO — Jonas Bergström:         380,000
+  VP Engineering — David Müller: 290,000
+  VP Sales — Sarah Chen:         310,000 (plus commission)
+
+  Retention: CTO is under a €200,000 retention agreement (two tranches, Jan 2027 / Jan 2028),
+  known only to CEO, CFO, and Board Chair.
+
+Pay Review Cycle
+----------------
+- Annual review effective April 1. Budget pool for FY2026: 4.2% of payroll.
+- Off-cycle adjustments require Director + HR approval and a written justification.
+
+This material must not be printed, forwarded, or stored outside approved systems.
+Questions: totalrewards@contoso-tech.internal

@@ -48,3 +48,10 @@ terraform.rc
 terraform/.terraform.lock.hcl
 
 .DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/

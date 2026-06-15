@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aria</title>
+  <script>
+    // Apply the saved sidebar state before paint (default: collapsed on small screens).
+    (function () {
+      try {
+        var s = localStorage.getItem('aria-sidebar-collapsed');
+        var collapsed = s === null ? window.matchMedia('(max-width: 760px)').matches : s === '1';
+        if (collapsed) document.documentElement.classList.add('sidebar-collapsed');
+      } catch (e) {}
+    })();
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --accent: #6366f1; --accent-dark: #4f46e5; --accent-light: #eef2ff;
+      --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0;
+      --text: #0f172a; --text-muted: #64748b; --header-bg: #0f172a;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); height: 100vh; display: flex; flex-direction: column; color: var(--text); font-size: 15px; line-height: 1.6; }
+    header { background: var(--header-bg); height: 60px; padding: 0 24px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .logo-icon { width: 34px; height: 34px; flex-shrink: 0; }
+    .brand { display: flex; flex-direction: column; line-height: 1.2; }
+    .brand-name { font-size: 1.05rem; font-weight: 700; color: #fff; letter-spacing: -0.01em; }
+    .brand-name .sep { color: rgba(255,255,255,0.3); margin: 0 7px; font-weight: 400; }
+    .brand-name .topic { color: var(--accent); }
+    .brand-sub { font-size: 0.7rem; color: rgba(255,255,255,0.38); letter-spacing: 0.04em; text-transform: uppercase; }
+    .header-actions { margin-left: auto; display: flex; gap: 8px; }
+    .hbtn { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); color: rgba(255,255,255,0.7); padding: 6px 16px; border-radius: 7px; cursor: pointer; font-size: 0.82rem; font-family: inherit; text-decoration: none; transition: background 0.15s, color 0.15s; }
+    .hbtn:hover { background: rgba(255,255,255,0.13); color: #fff; }
+    #chat { flex: 1; overflow-y: auto; padding: 28px 16px 8px; display: flex; flex-direction: column; gap: 18px; scroll-behavior: smooth; }
+    #chat::-webkit-scrollbar { width: 4px; }
+    #chat::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    #empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 40px 24px; max-width: 460px; margin: 0 auto; text-align: center; }
+    .empty-gem { opacity: 0.22; }
+    #empty-state h2 { font-size: 1.2rem; font-weight: 700; }
+    #empty-state p { font-size: 0.9rem; color: var(--text-muted); }
+    .msg-row { display: flex; gap: 10px; max-width: 780px; margin: 0 auto; width: 100%; animation: appear 0.18s ease-out; }
+    @keyframes appear { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    .msg-row.user { justify-content: flex-end; }
+    .avatar { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; margin-top: 4px; }
+    .avatar.ai { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
+    .avatar.user { background: #1e293b; }
+    .bubble { padding: 12px 16px; border-radius: 16px; font-size: 0.93rem; line-height: 1.65; max-width: calc(100% - 46px); }
+    .msg-row.user .bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+    .msg-row.assistant .bubble { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-bottom-left-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .bubble.error { background: #fef2f2 !important; border-color: #fecaca !important; color: #991b1b !important; }
+    .dots { display: inline-flex; gap: 5px; align-items: center; padding: 3px 0; }
+    .dots span { display: block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse 1.3s ease-in-out infinite; }
+    .dots span:nth-child(2) { animation-delay: 0.18s; }
+    .dots span:nth-child(3) { animation-delay: 0.36s; }
+    @keyframes pulse { 0%, 80%, 100% { opacity: 0.2; transform: scale(0.75); } 40% { opacity: 1; transform: scale(1); } }
+    .bubble p { margin-bottom: 0.55em; } .bubble p:last-child { margin-bottom: 0; }
+    .bubble strong { font-weight: 600; } .bubble em { font-style: italic; }
+    .bubble h1, .bubble h2, .bubble h3 { font-weight: 700; margin: 0.8em 0 0.25em; }
+    .bubble ul, .bubble ol { padding-left: 18px; margin: 5px 0; } .bubble li { margin: 3px 0; }
+    .bubble code { font-family: "SF Mono", "Menlo", monospace; font-size: 0.85em; background: #f1f5f9; color: #7c3aed; padding: 1px 5px; border-radius: 4px; }
+    .bubble pre { background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 10px; overflow-x: auto; margin: 8px 0; font-size: 0.83em; }
+    .bubble pre code { background: none; color: inherit; padding: 0; }
+    #input-area { flex-shrink: 0; padding: 10px 16px 20px; background: var(--bg); border-top: 1px solid var(--border); }
+    #input-wrap { max-width: 780px; margin: 0 auto; display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; padding: 10px 10px 10px 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); transition: border-color 0.15s, box-shadow 0.15s; }
+    #input-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
+    #input { flex: 1; border: none; outline: none; resize: none; font-size: 0.93rem; font-family: inherit; line-height: 1.5; background: transparent; color: var(--text); min-height: 22px; max-height: 140px; }
+    #send-btn { width: 36px; height: 36px; flex-shrink: 0; background: var(--accent); border: none; border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s, transform 0.1s; }
+    #send-btn:hover:not(:disabled) { background: var(--accent-dark); }
+    #send-btn:disabled { background: var(--border); cursor: not-allowed; }
+    #send-btn svg { color: #fff; }
+    /* Layout: sidebar + main column under the header */
+    #body-row { flex: 1; display: flex; min-height: 0; }
+    #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    #sidebar { width: 300px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; overflow-x: hidden; padding: 22px 18px; display: flex; flex-direction: column; gap: 26px; transition: width 0.22s ease, padding 0.22s ease; }
+    .icon-btn { padding: 6px 9px; display: inline-flex; align-items: center; justify-content: center; }
+    .sidebar-collapsed #sidebar { width: 0; padding-left: 0; padding-right: 0; border-right: none; }
+    #sidebar::-webkit-scrollbar { width: 4px; }
+    #sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .side-sec h3 { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 11px; font-weight: 700; }
+    .suggest-chip { display: block; width: 100%; text-align: left; background: var(--accent-light); border: 1px solid #e0e7ff; color: var(--accent-dark); padding: 9px 12px; border-radius: 9px; font-size: 0.83rem; font-family: inherit; line-height: 1.4; cursor: pointer; margin-bottom: 8px; transition: background 0.15s, border-color 0.15s; }
+    .suggest-chip:hover { background: #e0e7ff; border-color: var(--accent); }
+    .doc-item { padding: 11px 0; border-bottom: 1px solid var(--border); }
+    .doc-item:last-child { border-bottom: none; }
+    .doc-title { font-size: 0.85rem; font-weight: 600; color: var(--text); display: flex; align-items: flex-start; gap: 8px; }
+    .doc-icon { width: 14px; height: 14px; flex-shrink: 0; color: var(--accent); margin-top: 2px; }
+    .doc-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; line-height: 1.5; padding-left: 22px; }
+    .sidebar-empty { font-size: 0.8rem; color: var(--text-muted); }
+    .empty-chips { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 380px; }
+    /* On small screens the sidebar overlays the chat (slides in/out) instead of squeezing it. */
+    @media (max-width: 760px) {
+      #body-row { position: relative; }
+      #sidebar { position: absolute; top: 0; bottom: 0; left: 0; width: 280px; max-width: 82vw; padding: 22px 18px; border-right: 1px solid var(--border); transform: translateX(0); transition: transform 0.22s ease; z-index: 30; box-shadow: 4px 0 16px rgba(0,0,0,0.15); }
+      .sidebar-collapsed #sidebar { width: 280px; max-width: 82vw; padding: 22px 18px; transform: translateX(-100%); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="logo" href="/">
+      <svg class="logo-icon" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="17,3 31,17 17,31 3,17" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="1"/>
+        <polygon points="17,7 28,17 17,27 6,17" fill="rgba(99,102,241,0.55)"/>
+        <polygon points="17,7 28,17 17,17" fill="rgba(139,92,246,0.75)"/>
+        <polygon points="17,7 17,17 6,17" fill="rgba(99,102,241,0.85)"/>
+        <circle cx="17" cy="17" r="2.6" fill="white" opacity="0.9"/>
+      </svg>
+      <div class="brand">
+        <span class="brand-name" id="brand-name">Aria</span>
+        <span class="brand-sub" id="brand-sub">by Contoso</span>
+      </div>
+    </a>
+    <button class="hbtn icon-btn" id="sidebar-toggle" title="Show/hide sidebar" aria-label="Toggle sidebar">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/>
+      </svg>
+    </button>
+    <div class="header-actions">
+      <a class="hbtn" href="/">Topics</a>
+      <button class="hbtn" id="clear-btn">New chat</button>
+    </div>
+  </header>
+
+  <div id="body-row">
+    <aside id="sidebar">
+      <div id="sidebar-content"><p class="sidebar-empty">Loading…</p></div>
+    </aside>
+    <div id="main">
+
+  <div id="chat">
+    <div id="empty-state">
+      <svg class="empty-gem" width="56" height="56" viewBox="0 0 34 34" fill="none">
+        <polygon points="17,7 28,17 17,27 6,17" fill="#6366f1"/>
+        <polygon points="17,7 28,17 17,17" fill="#8b5cf6"/>
+        <polygon points="17,7 17,17 6,17" fill="#6366f1" opacity="0.85"/>
+        <circle cx="17" cy="17" r="2.6" fill="white"/>
+      </svg>
+      <h2>How can I help you?</h2>
+      <p id="empty-sub">Loading…</p>
+    </div>
+  </div>
+
+  <div id="input-area">
+    <div id="input-wrap">
+      <textarea id="input" rows="1" placeholder="Ask a question…"></textarea>
+      <button id="send-btn" title="Send (Enter)">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+          <path d="M12 20V4M12 4L6 10M12 4l6 6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+    </div><!-- #main -->
+  </div><!-- #body-row -->
+
+  <script>
+    const chat = document.getElementById('chat');
+    const input = document.getElementById('input');
+    const sendBtn = document.getElementById('send-btn');
+    const clearBtn = document.getElementById('clear-btn');
+    const docIconSvg = `<svg class="doc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>`;
+    let suggestedQuestions = [];
+
+    // Topic slug from the /t/<slug> path.
+    const TOPIC = decodeURIComponent(location.pathname.split('/t/')[1] || '').replace(/\/.*$/, '');
+    const HISTORY_KEY = 'aria-history-' + TOPIC;
+    let history = [];
+    try { history = JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; } catch (_) { history = []; }
+
+    // ── Bootstrap: confirm access and resolve the topic display name ──────────
+    (async () => {
+      try {
+        const data = await fetch('/api/topics').then(r => r.json());
+        const company = data.company_name || 'Contoso';
+        const topic = (data.topics || []).find(t => t.slug === TOPIC);
+        if (!topic) { window.location.replace('/'); return; }  // no access → back to landing
+        document.getElementById('brand-name').innerHTML =
+          `Aria<span class="sep">·</span><span class="topic">${escHtml(topic.display)}</span>`;
+        document.getElementById('brand-sub').textContent = 'by ' + company;
+        document.title = `Aria — ${topic.display}`;
+        document.getElementById('empty-sub').textContent =
+          `Ask about ${company}'s ${topic.display} documents. Answers are grounded in your knowledge base.`;
+        renderHistory();
+        loadOverview();
+      } catch (_) {
+        document.getElementById('empty-sub').textContent = 'Could not load this topic.';
+      }
+    })();
+
+    // ── Sidebar: AI suggested questions + readable document descriptions ──────
+    function makeChip(q) {
+      const b = document.createElement('button');
+      b.className = 'suggest-chip'; b.textContent = q;
+      b.addEventListener('click', () => { input.value = q; sendMessage(); });
+      return b;
+    }
+    function renderEmptyChips(questions) {
+      const es = document.getElementById('empty-state');
+      if (!es || !questions.length || es.querySelector('.empty-chips')) return;
+      const wrap = document.createElement('div'); wrap.className = 'empty-chips';
+      questions.slice(0, 4).forEach(q => wrap.appendChild(makeChip(q)));
+      es.appendChild(wrap);
+    }
+    async function loadOverview() {
+      const box = document.getElementById('sidebar-content');
+      try {
+        const ov = await fetch(`/api/topics/${encodeURIComponent(TOPIC)}/overview`).then(r => r.json());
+        suggestedQuestions = (ov.questions || []).filter(q => typeof q === 'string');
+        box.innerHTML = '';
+        if (suggestedQuestions.length) {
+          const sec = document.createElement('div'); sec.className = 'side-sec';
+          sec.innerHTML = '<h3>Try asking</h3>';
+          suggestedQuestions.forEach(q => sec.appendChild(makeChip(q)));
+          box.appendChild(sec);
+          renderEmptyChips(suggestedQuestions);
+        }
+        const docs = ov.documents || [];
+        if (docs.length) {
+          const sec = document.createElement('div'); sec.className = 'side-sec';
+          sec.innerHTML = `<h3>What's in here</h3>`;
+          for (const doc of docs) {
+            const item = document.createElement('div'); item.className = 'doc-item';
+            item.innerHTML = `<div class="doc-title">${docIconSvg}<span>${escHtml(doc.title || doc.file_name)}</span></div>`
+              + (doc.description ? `<div class="doc-desc">${escHtml(doc.description)}</div>` : '');
+            sec.appendChild(item);
+          }
+          box.appendChild(sec);
+        }
+        if (!box.children.length) box.innerHTML = '<p class="sidebar-empty">No documents available yet.</p>';
+      } catch (_) {
+        box.innerHTML = '<p class="sidebar-empty">Couldn’t load suggestions.</p>';
+      }
+    }
+
+    // ── Markdown renderer ─────────────────────────────────────────────────────
+    function escHtml(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function renderInline(text) {
+      let h = escHtml(text);
+      h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
+      h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      h = h.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+      return h;
+    }
+    function renderMarkdown(text) {
+      const lines = text.split('\n'); let html = ''; let i = 0; let inCode = false; let codeLines = [];
+      while (i < lines.length) {
+        const line = lines[i];
+        if (line.startsWith('```')) {
+          if (!inCode) { inCode = true; codeLines = []; }
+          else { html += `<pre><code>${escHtml(codeLines.join('\n'))}</code></pre>`; inCode = false; codeLines = []; }
+          i++; continue;
+        }
+        if (inCode) { codeLines.push(line); i++; continue; }
+        const hm = line.match(/^(#{1,3}) (.+)/);
+        if (hm) { const tag = `h${hm[1].length}`; html += `<${tag}>${renderInline(hm[2])}</${tag}>`; i++; continue; }
+        if (/^[-*] /.test(line)) { html += '<ul>'; while (i < lines.length && /^[-*] /.test(lines[i])) { html += `<li>${renderInline(lines[i].slice(2))}</li>`; i++; } html += '</ul>'; continue; }
+        if (/^\d+\. /.test(line)) { html += '<ol>'; while (i < lines.length && /^\d+\. /.test(lines[i])) { html += `<li>${renderInline(lines[i].replace(/^\d+\. /, ''))}</li>`; i++; } html += '</ol>'; continue; }
+        if (line.trim() === '') { i++; continue; }
+        const para = [];
+        while (i < lines.length && lines[i].trim() !== '' && !lines[i].startsWith('```') && !/^[-*#\d]/.test(lines[i])) { para.push(renderInline(lines[i])); i++; }
+        if (para.length) html += `<p>${para.join('<br>')}</p>`;
+      }
+      if (inCode && codeLines.length) html += `<pre><code>${escHtml(codeLines.join('\n'))}</code></pre>`;
+      return html;
+    }
+
+    // ── DOM helpers ────────────────────────────────────────────────────────────
+    const ariaAvatarSvg = `<svg width="16" height="16" viewBox="0 0 34 34" fill="none"><polygon points="17,7 28,17 17,27 6,17" fill="white" opacity="0.85"/><polygon points="17,7 28,17 17,17" fill="white" opacity="0.6"/><circle cx="17" cy="17" r="2.6" fill="white"/></svg>`;
+    const userAvatarSvg = `<svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(255,255,255,0.8)"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm-7 9a7 7 0 1114 0H5z"/></svg>`;
+    function removeEmpty() { document.getElementById('empty-state')?.remove(); }
+    function addUserMessage(text) {
+      removeEmpty();
+      const row = document.createElement('div'); row.className = 'msg-row user';
+      row.innerHTML = `<div class="bubble">${escHtml(text)}</div><div class="avatar user">${userAvatarSvg}</div>`;
+      chat.appendChild(row); chat.scrollTop = chat.scrollHeight;
+    }
+    function addAIBubble(initialHtml) {
+      const row = document.createElement('div'); row.className = 'msg-row assistant';
+      row.innerHTML = `<div class="avatar ai">${ariaAvatarSvg}</div><div class="bubble">${initialHtml || '<div class="dots"><span></span><span></span><span></span></div>'}</div>`;
+      chat.appendChild(row); chat.scrollTop = chat.scrollHeight;
+      return row.querySelector('.bubble');
+    }
+    function setLoading(on) { sendBtn.disabled = on; input.disabled = on; }
+    function persist() { try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch (_) {} }
+    function renderHistory() {
+      if (!history.length) return;
+      removeEmpty();
+      for (const turn of history) {
+        if (turn.role === 'user') addUserMessage(turn.content);
+        else addAIBubble(renderMarkdown(turn.content));
+      }
+    }
+
+    // ── Send ────────────────────────────────────────────────────────────────────
+    async function sendMessage() {
+      const message = input.value.trim();
+      if (!message) return;
+      input.value = ''; input.style.height = 'auto';
+      addUserMessage(message); setLoading(true);
+      const bubble = addAIBubble();
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic: TOPIC, message, history }),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const reader = res.body.getReader(); const decoder = new TextDecoder();
+        let fullText = ''; let first = true;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const lines = decoder.decode(value, { stream: true }).split('\n');
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const payload = line.slice(6).trim();
+            if (payload === '[DONE]') break;
+            try {
+              const parsed = JSON.parse(payload);
+              if (parsed.error) { bubble.classList.add('error'); bubble.textContent = parsed.error; first = false; }
+              else if (parsed.content) { first = false; fullText += parsed.content; bubble.innerHTML = renderMarkdown(fullText); chat.scrollTop = chat.scrollHeight; }
+            } catch (_) {}
+          }
+        }
+        if (first) bubble.textContent = 'No response received.';
+        history.push({ role: 'user', content: message });
+        history.push({ role: 'assistant', content: fullText });
+        if (history.length > 20) history = history.slice(-20);
+        persist();
+      } catch (err) {
+        bubble.classList.add('error'); bubble.textContent = 'Connection error: ' + err.message;
+      } finally { setLoading(false); input.focus(); }
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+    clearBtn.addEventListener('click', () => {
+      history = []; persist();
+      chat.innerHTML = `<div id="empty-state"><svg class="empty-gem" width="56" height="56" viewBox="0 0 34 34" fill="none"><polygon points="17,7 28,17 17,27 6,17" fill="#6366f1"/><polygon points="17,7 28,17 17,17" fill="#8b5cf6"/><polygon points="17,7 17,17 6,17" fill="#6366f1" opacity="0.85"/><circle cx="17" cy="17" r="2.6" fill="white"/></svg><h2>How can I help you?</h2><p>Ask away — your previous conversation was cleared.</p></div>`;
+      renderEmptyChips(suggestedQuestions);
+    });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+    input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 140) + 'px'; });
+
+    // Sidebar collapse/expand — persisted across visits.
+    document.getElementById('sidebar-toggle').addEventListener('click', () => {
+      const collapsed = document.documentElement.classList.toggle('sidebar-collapsed');
+      try { localStorage.setItem('aria-sidebar-collapsed', collapsed ? '1' : '0'); } catch (_) {}
+    });
+  </script>
+</body>
+</html>

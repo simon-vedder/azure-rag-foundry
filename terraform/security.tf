@@ -1,81 +1,66 @@
-# App Registration for Easy Auth (Entra ID authentication on the web app)
-resource "azuread_application" "main" {
-  display_name     = local.entra_app_name
-  sign_in_audience = "AzureADMyOrg"
-
-  app_role {
-    allowed_member_types = ["User"]
-    description          = "Can read internal-level documents"
-    display_name         = "Internal Reader"
-    enabled              = true
-    id                   = random_uuid.internal_read_role.result
-    value                = "Internal.Read"
-  }
-
-  app_role {
-    allowed_member_types = ["User"]
-    description          = "Can read confidential-level documents"
-    display_name         = "Confidential Reader"
-    enabled              = true
-    id                   = random_uuid.confidential_read_role.result
-    value                = "Confidential.Read"
-  }
-
-  web {
-    homepage_url  = local.app_url
-    redirect_uris = ["${local.app_url}/.auth/login/aad/callback"]
-
-    implicit_grant {
-      access_token_issuance_enabled = false
-      id_token_issuance_enabled     = true
-    }
-  }
-
-  required_resource_access {
-    resource_app_id = "00000003-0000-0000-c000-000000000000" # Microsoft Graph
-
-    resource_access {
-      id   = "e1fe6dd8-ba31-4d61-89e7-88639da4683d" # User.Read
-      type = "Scope"
-    }
-  }
+# Dedicated user-assigned identity used ONLY as the Easy Auth federated-credential subject.
+# Keeping it separate from the app's system-assigned identity (which holds the data-plane RBAC)
+# means nothing beyond this app registration's login flow can authenticate as the Entra app.
+resource "azurerm_user_assigned_identity" "easy_auth" {
+  name                = local.uami_name
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
 }
 
-resource "azuread_service_principal" "main" {
-  client_id                    = azuread_application.main.client_id
-  # Only users explicitly assigned an app role in Entra ID can authenticate.
-  # Assign Internal.Read or Confidential.Read to grant elevated access.
-  # Any tenant user without an explicit assignment is denied at the Easy Auth layer.
-  app_role_assignment_required = true
-}
+# Entra ID app registration with generated per-topic app roles, plus all RBAC for the
+# App Service managed identity. Role values follow <topic>.<Tier>.<Action> (e.g. hr.Internal.Read)
+# and are decoded by the app to build the server-side search filter.
+module "identity" {
+  source = "../modules/identity"
 
-resource "azuread_application_password" "easy_auth" {
-  application_id = azuread_application.main.id
-  display_name   = "easy-auth"
-  end_date       = "2099-01-01T00:00:00Z"
+  name             = local.entra_app_name
+  app_url          = local.app_url
+  topics           = var.topics
+  tiers            = var.tiers
+  public_tier_mode = var.public_tier_mode
+
+  # Only users explicitly assigned an app role in Entra ID (directly or via a role group) can
+  # authenticate. Any tenant user without an assignment is denied at the Easy Auth layer.
+  require_role_assignment = true
+  create_role_groups      = var.create_role_groups
+
+  # Secretless Easy Auth: no client secret is created; Easy Auth authenticates as the app via a
+  # federated credential trusting the user-assigned identity above.
+  use_managed_identity_auth = true
+  easy_auth_fic_subject     = azurerm_user_assigned_identity.easy_auth.principal_id
+  tenant_id                 = data.azuread_client_config.current.tenant_id
 }
 
 # RBAC: App Service Managed Identity → Azure OpenAI
 resource "azurerm_role_assignment" "app_openai" {
-  scope                = azurerm_cognitive_account.openai.id
+  scope                = module.ai.openai_id
   role_definition_name = "Cognitive Services OpenAI User"
-  principal_id         = azurerm_linux_web_app.main.identity[0].principal_id
+  principal_id         = module.app.principal_id
 }
 
 # RBAC: App Service Managed Identity → AI Search (read + query)
 resource "azurerm_role_assignment" "app_search_reader" {
-  scope                = azurerm_search_service.main.id
+  scope                = module.ai.search_id
   role_definition_name = "Search Index Data Reader"
-  principal_id         = azurerm_linux_web_app.main.identity[0].principal_id
+  principal_id         = module.app.principal_id
 }
 
-# RBAC: App Service Managed Identity → Storage (read documents)
+# RBAC: App Service Managed Identity → AI Search service administration.
+# Required only for the document manager's "reindex now" button (POST /indexers/<name>/run is a
+# service-administration operation with no narrower built-in role). Trade-off: this also allows
+# the app identity to modify index definitions. Remove this assignment if you accept the hourly
+# indexer schedule instead of on-demand reindexing.
+resource "azurerm_role_assignment" "app_search_contributor" {
+  scope                = module.ai.search_id
+  role_definition_name = "Search Service Contributor"
+  principal_id         = module.app.principal_id
+}
+
+# RBAC: App Service Managed Identity → Storage.
+# Contributor (not Reader) because the in-app document manager uploads blobs, sets the IsDeleted
+# soft-delete metadata, and writes the topic/access_level metadata the search index relies on.
 resource "azurerm_role_assignment" "app_storage" {
-  scope                = azurerm_storage_account.main.id
-  role_definition_name = "Storage Blob Data Reader"
-  principal_id         = azurerm_linux_web_app.main.identity[0].principal_id
+  scope                = module.storage.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = module.app.principal_id
 }
-
-# RBAC: Local user running ingest.py needs these roles assigned manually or via CI
-# Search Index Data Contributor + Storage Blob Data Reader on the storage account
-# Cognitive Services OpenAI User on the OpenAI account

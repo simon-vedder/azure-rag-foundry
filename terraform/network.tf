@@ -73,9 +73,13 @@ resource "azurerm_private_endpoint" "openai" {
   resource_group_name = azurerm_resource_group.main.name
   subnet_id           = azurerm_subnet.private_endpoints.id
 
+  # Wait for the OpenAI account to finish provisioning (its model deployments only complete once the
+  # account reaches Succeeded) — attaching a private endpoint while it is still "Accepted" 400s.
+  depends_on = [module.ai]
+
   private_service_connection {
     name                           = "${local.oai_name}-psc"
-    private_connection_resource_id = azurerm_cognitive_account.openai.id
+    private_connection_resource_id = module.ai.openai_id
     subresource_names              = ["account"]
     is_manual_connection           = false
   }
@@ -96,7 +100,7 @@ resource "azurerm_private_endpoint" "search" {
 
   private_service_connection {
     name                           = "${local.srch_name}-psc"
-    private_connection_resource_id = azurerm_search_service.main.id
+    private_connection_resource_id = module.ai.search_id
     subresource_names              = ["searchService"]
     is_manual_connection           = false
   }
@@ -116,7 +120,7 @@ resource "azurerm_private_endpoint" "storage" {
 
   private_service_connection {
     name                           = "${local.st_name}-psc"
-    private_connection_resource_id = azurerm_storage_account.main.id
+    private_connection_resource_id = module.storage.id
     subresource_names              = ["blob"]
     is_manual_connection           = false
   }

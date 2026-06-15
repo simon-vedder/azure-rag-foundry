@@ -3,7 +3,7 @@ output "resource_group_name" {
 }
 
 output "app_service_name" {
-  value = azurerm_linux_web_app.main.name
+  value = module.app.web_app_name
 }
 
 output "app_url" {
@@ -11,24 +11,30 @@ output "app_url" {
 }
 
 output "openai_endpoint" {
-  value = azurerm_cognitive_account.openai.endpoint
+  value = module.ai.openai_endpoint
 }
 
 output "search_endpoint" {
-  value = "https://${azurerm_search_service.main.name}.search.windows.net"
+  value = module.ai.search_endpoint
 }
 
 output "storage_account_name" {
-  value = azurerm_storage_account.main.name
+  value = module.storage.name
 }
 
 output "app_insights_connection_string" {
-  value     = azurerm_application_insights.main.connection_string
+  value     = module.app.app_insights_connection_string
   sensitive = true
 }
 
 output "entra_app_client_id" {
-  value = azuread_application.main.client_id
+  value = module.identity.client_id
+}
+
+# role value => { group name, object id }. Add members to these groups to grant access
+# (empty when create_role_groups = false).
+output "role_groups" {
+  value = module.identity.role_groups
 }
 
 output "tenant_id" {
@@ -36,5 +42,5 @@ output "tenant_id" {
 }
 
 output "managed_identity_principal_id" {
-  value = azurerm_linux_web_app.main.identity[0].principal_id
+  value = module.app.principal_id
 }

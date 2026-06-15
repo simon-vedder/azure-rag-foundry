@@ -8,7 +8,7 @@ Two Terraform configs are included:
 
 | Config | Tier | Cost | Use case |
 |---|---|---|---|
-| `terraform/` | Standard | ~$416/month | Production — MSI everywhere, no API keys, VNet-ready |
+| `terraform/` | Standard | ~$416/month | Production — MSI everywhere, no secrets (secretless Easy Auth), VNet-ready |
 | `terraform-free/` | Free | ~$15/month | Testing/demos — API keys, no VNet, fully functional |
 
 ---
@@ -52,10 +52,12 @@ Two Terraform configs are included:
 
 - **Chat UI** — clean, modern interface (Aria branding, customizable per company)
 - **Streamed responses** — tokens appear as they're generated, not after a full round-trip
+- **Chunked retrieval** — documents are split into overlapping chunks and embedded per chunk for better recall and cleaner citations (not whole-file embedding)
 - **Hybrid search** — vector + keyword search across your documents (AI Search)
-- **Role-based document access** — `public`, `internal`, `confidential` access levels enforced server-side
+- **Role-based document access** — configurable sensitivity tiers (default `general`, `internal`) enforced server-side
 - **Entra ID auth** — Easy Auth blocks unauthenticated users before they reach your app
-- **Zero API keys** — App Service Managed Identity accesses OpenAI, Search, and Storage via RBAC
+- **Zero secrets in the secure baseline** — App Service Managed Identity accesses OpenAI, Search, and Storage via RBAC, and Easy Auth itself is secretless (a federated identity credential replaces the client secret)
+- **Diagnostics & alerts** — platform logs/metrics flow to Log Analytics, with metric alerts on errors, latency, and throttling
 - **Markdown rendering** — AI responses render with formatting (headers, lists, code blocks)
 - **Conversation history** — last 10 turns sent with each request for context
 - **Company branding** — set your company name via a Terraform variable
@@ -151,44 +153,77 @@ az ad app permission admin-consent --id "$CLIENT_ID"
 
 Or in the portal: **Entra ID → App registrations → `rag-rag-<suffix>` → API permissions → Grant admin consent**.
 
-### 6. Assign app roles to users
+### 6. Give users access
 
-Terraform creates the roles but deliberately does not assign them — you control who gets access.
+Each topic gets its own set of generated app roles, one per configured tier plus a content admin.
+With the default `tiers = ["general", "internal"]`, a topic with display name `HR` produces:
 
-In the portal: **Entra ID → Enterprise applications → `rag-rag-<suffix>` → Users and groups → Add user/group**
+| Role (portal display) | Role value | Access in that topic |
+|---|---|---|
+| *(any authenticated user)* | — | `general` tier (only in `public_tier_mode = all_users`, the default) |
+| `HR Internal Reader` | `hr.Internal.Read` | `general` + `internal` |
+| `HR Content Admin` | `hr.Content.Admin` | read all tiers **and** manage documents (`/admin`) |
 
-| Role | Documents accessible |
-|---|---|
-| *(any authenticated user)* | `public/` |
-| `Internal Reader` | `public/` + `internal/` |
-| `Confidential Reader` | `public/` + `internal/` + `confidential/` |
+Add `"confidential"` to `tiers` and you also get `HR Confidential Reader` (`hr.Confidential.Read`).
+Roles are strictly per topic — `hr.Internal.Read` grants nothing in `it`. In
+`public_tier_mode = role_required`, even the base tier needs an explicit `hr.General.Read` role and
+topics are invisible to users holding no role for them.
+
+**Recommended: manage access by group (default).** With `create_role_groups = true` (the default,
+requires Entra ID P1+), Terraform creates one security group per role and assigns it, so you never
+touch app-role assignments — you just add people to groups:
+
+```bash
+terraform -chdir=terraform output role_groups   # role value -> { group name, object id }
+# Add a user to the "HR Internal Reader" group → they get hr.Internal.Read on next sign-in.
+az ad group member add --group "<group object id>" --member-id "<user object id>"
+```
+
+The app role lands in the member's token automatically, so the search filter just works. (Only
+direct group members get the role — nested groups aren't honored.)
+
+**Manual alternative.** Set `create_role_groups = false` and assign roles directly:
+**Entra ID → Enterprise applications → `rag-rag-<suffix>` → Users and groups → Add user/group**.
 
 ### 7. Upload your own documents (optional)
 
-Sample documents are already in place from the `terraform apply` in step 4 — you can start chatting as soon as steps 5 and 6 are done. View `storage.tf` to see where and how the sample documents are uploaded.
+Sample documents are already in place from the `terraform apply` in step 4 — you can start chatting as
+soon as steps 5 and 6 are done.
 
-This step is only needed when you want to load your own content. Documents are organized by access level using folder prefixes inside the `documents` blob container:
+The easiest way to load your own content is the built-in **document manager at `/admin`** (any
+`*.Content.Admin` holder), covered in [Managing the Knowledge Base](#managing-the-knowledge-base).
+
+To bulk-load from the CLI instead, documents live under `<topic>/<access_level>/` in the `documents`
+blob container, and the `topic` + `access_level` blob metadata is the authoritative source for the
+index (the folder path is convention for humans):
 
 ```
 documents/
-  public/         → all authenticated users
-  internal/       → Internal Reader role required
-  confidential/   → Confidential Reader role required
+  hr/general/        it/general/        → general tier (all authenticated users)
+  hr/internal/       it/internal/       → Internal Reader role required
+  hr/confidential/   it/confidential/   → Confidential Reader role (only if "confidential" is a configured tier)
 ```
 
 ```bash
 STORAGE=$(terraform -chdir=terraform output -raw storage_account_name)
 
-az storage blob upload-batch \
+az storage blob upload \
   --account-name "$STORAGE" \
-  --destination documents/public \
-  --source ./my-docs/public/ \
+  --container-name documents \
+  --name "hr/general/q1-2026-report.pdf" \
+  --file ./q1-2026-report.pdf \
+  --metadata topic=hr access_level=general \
   --auth-mode login
 ```
 
-Supported formats: **PDF, DOCX, TXT, MD, CSV**. The AI Search indexer picks up new files automatically every hour. To trigger it immediately: Azure portal → AI Search → Indexers → select indexer → **Run**.
+> **The `topic` and `access_level` metadata are required.** A blob without them matches no access
+> filter and is invisible to every user (fail closed).
 
-> **Permissions:** uploading requires `Storage Blob Data Contributor` on the storage account. Assign it once: `az role assignment create --role "Storage Blob Data Contributor" --assignee "<your-object-id>" --scope "<storage-account-id>"`
+Supported formats: **PDF, DOCX, TXT, MD, CSV**. The AI Search indexer picks up new files automatically
+every hour, or trigger it immediately with the **Reindex now** button in `/admin`.
+
+> **Permissions:** CLI upload requires `Storage Blob Data Contributor` on the storage account. Assign it
+> once: `az role assignment create --role "Storage Blob Data Contributor" --assignee "<your-object-id>" --scope "<storage-account-id>"`
 
 ### 8. Open the app
 
@@ -197,80 +232,56 @@ terraform -chdir=terraform-free output -raw app_url
 # or: terraform -chdir=terraform output -raw app_url
 ```
 
+The landing page (`/`) shows a card for each topic you can access. Pick one to chat; if you can access
+exactly one topic you're taken straight into it.
+
 ---
 
 ## Managing the Knowledge Base
 
-Ingestion is fully automated. The AI Search indexers run every hour and pick up new, modified, and deleted documents automatically. The only admin task is managing files in blob storage.
+Ingestion is fully automated. The single AI Search indexer runs every hour over the whole `documents`
+container and picks up new, modified, and deleted files automatically. There are two ways to manage
+documents.
 
-### Adding or updating documents
+### Option A — the built-in document manager (recommended)
 
-Upload the new or updated file to the correct access-level folder:
+Open `/admin` as a user holding a `*.Content.Admin` role. For each topic you administer you can:
+
+- See the current documents grouped by access tier.
+- **Upload** a file — pick the topic and access level; the blob path and `topic`/`access_level`
+  metadata are written for you, scoped to your topic.
+- **Delete** a file — sets the `IsDeleted` soft-delete metadata so the indexer drops its chunks.
+- **Reindex now** — triggers the indexer instead of waiting up to an hour.
+
+An admin can only ever act on topics they hold `Content.Admin` for; the server builds every blob path
+from the validated topic, so an HR admin cannot write into `it/`.
+
+### Option B — the Azure CLI
+
+The metadata is what counts; the folder path is just convention. Always set `topic` and `access_level`.
 
 ```bash
 STORAGE=$(terraform -chdir=terraform output -raw storage_account_name)
 
-# Public document (all authenticated users)
+# Add or update a document
 az storage blob upload \
-  --account-name "$STORAGE" \
-  --container-name documents \
-  --name "public/q1-2026-report.pdf" \
-  --file ./q1-2026-report.pdf \
-  --auth-mode login
-
-# Internal document (Internal Reader role required)
-az storage blob upload \
-  --account-name "$STORAGE" \
-  --container-name documents \
-  --name "internal/salary-bands-2026.pdf" \
+  --account-name "$STORAGE" --container-name documents \
+  --name "hr/internal/salary-bands-2026.pdf" \
   --file ./salary-bands-2026.pdf \
+  --metadata topic=hr access_level=internal \
   --auth-mode login
-```
 
-The indexer picks up the new file on the next scheduled run (up to 1 hour). To trigger it immediately: Azure portal → AI Search → Indexers → select the relevant indexer → **Run**.
-
-### Deleting documents
-
-The indexers use a soft-delete detection policy. To delete a document from the index:
-
-1. Set the `IsDeleted` metadata property on the blob to `"true"`:
-
-```bash
+# Soft-delete a document (indexer removes its chunks on the next run)
 az storage blob metadata update \
-  --account-name "$STORAGE" \
-  --container-name documents \
-  --name "public/old-policy.pdf" \
-  --metadata IsDeleted=true \
+  --account-name "$STORAGE" --container-name documents \
+  --name "hr/general/old-policy.pdf" \
+  --metadata topic=hr access_level=general IsDeleted=true \
   --auth-mode login
 ```
 
-2. Wait for the next indexer run (or trigger it manually). The indexer removes the document's chunks from the index.
-3. Delete the blob itself once the indexer has processed it.
-
-### Changing a document's access level
-
-Move it to a different folder prefix — the access level is derived from the folder name automatically.
-
-```bash
-# Copy from public/ to internal/
-az storage blob copy start \
-  --account-name "$STORAGE" \
-  --destination-container documents \
-  --destination-blob "internal/policy.pdf" \
-  --source-blob "public/policy.pdf" \
-  --source-container documents \
-  --auth-mode login
-
-# Mark the old blob for deletion
-az storage blob metadata update \
-  --account-name "$STORAGE" \
-  --container-name documents \
-  --name "public/policy.pdf" \
-  --metadata IsDeleted=true \
-  --auth-mode login
-```
-
-On the next indexer run, the old chunks are removed and new chunks with the updated access level are created.
+To change a document's topic or access level, re-upload it to the new path with updated metadata and
+soft-delete the old blob. Trigger the indexer immediately from `/admin` (**Reindex now**) or via the
+Azure portal → AI Search → Indexers → **Run**.
 
 ---
 
@@ -304,6 +315,38 @@ Run `terraform apply`. With `enable_vnet_integration = true`:
 
 > **Cost tip:** Buy a 1-year reserved instance for P1v3 on day one — saves ~35% (~$130 → ~$85/month).
 
+### Terraform Remote State
+
+The configs ship without a backend block so they work out of the box with local state. For any shared or production deployment, use an Azure Storage backend with state locking instead — local state has no locking and is easily lost.
+
+1. Create the backend storage once (separate from the app's resource group so `destroy` never removes your state):
+
+```bash
+az group create --name tfstate-rg --location swedencentral
+az storage account create --name <globally-unique-name> --resource-group tfstate-rg \
+  --sku Standard_LRS --encryption-services blob --min-tls-version TLS1_2 \
+  --allow-blob-public-access false
+az storage container create --name tfstate --account-name <globally-unique-name> --auth-mode login
+```
+
+2. Add a backend block to `terraform/` (e.g. in `main.tf`), using one key per environment:
+
+```hcl
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "tfstate-rg"
+    storage_account_name = "<globally-unique-name>"
+    container_name       = "tfstate"
+    key                  = "rag/prod.terraform.tfstate"   # e.g. rag/dev, rag/prod
+    use_azuread_auth     = true
+  }
+}
+```
+
+3. Run `terraform init -migrate-state`.
+
+**RBAC for runners:** the identity running Terraform needs `Storage Blob Data Contributor` on the state storage account (state read/write + blob-lease locking). With `use_azuread_auth = true` no storage account keys are involved. Locking is automatic via blob leases — concurrent applies block instead of corrupting state.
+
 ---
 
 ## Cost Estimate
@@ -333,6 +376,7 @@ Retail USD, Sweden Central. Actual costs depend on usage volume and any EA/reser
 | AI Search | Standard S1 | $245 |
 | Blob Storage | Standard LRS | ~$5 |
 | Log Analytics + App Insights | PerGB2018 | ~$13 |
+| Managed identity (Easy Auth FIC) | — | $0 |
 | Private DNS zones ×3 | — | $1.50 |
 | Private endpoints ×3 | — | ~$22 |
 
@@ -351,14 +395,21 @@ Variables common to both configs:
 | `openai_model` | `"gpt-4o"` | Chat model deployment name |
 | `openai_model_version` | `"2024-11-20"` | Chat model version — check the [Azure OpenAI model lifecycle page](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/model-retirements) for retirement dates and update this when a new version is available |
 | `openai_capacity` | `10` | Capacity in K tokens per minute |
-| `embedding_model` | `"text-embedding-3-small"` | Embedding model deployment name. Changing this requires updating index dimensions |
+| `embedding_model` | `"text-embedding-3-small"` | Embedding model deployment name. Index vector dimensions are derived automatically (validated against a supported set) |
+| `topics` | `{ hr = "HR", it = "IT" }` | Map of topic slug → display name. Each topic gets its own document folders, generated app roles, landing card, and chat at `/t/<slug>`. Adding one is a single entry plus `terraform apply` |
+| `tiers` | `["general", "internal"]` | Ordered access tiers per topic, most-open first. Each higher tier generates a `<Tier>.Read` role granting that tier and every tier below. Use `["general"]` for topic-membership-only, or add `"confidential"` for a third level |
+| `public_tier_mode` | `"all_users"` | `all_users`: any authenticated employee sees a topic's base (`general`) tier. `role_required`: even the base tier needs a `<topic>.General.Read` role and topics are hidden without a role |
+| `create_role_groups` | `true` | Create one Entra security group per role and assign it, so admins manage access by group membership. Requires Entra ID P1+ |
 
 `terraform/` only:
 
 | Variable | Default | Description |
 |---|---|---|
-| `app_service_sku` | `"P1v3"` | App Service SKU. P1v3 required for VNet integration |
+| `app_service_sku` | `"P1v3"` | App Service SKU. VNet integration requires Basic tier or higher (P1v3 recommended) |
 | `enable_vnet_integration` | `false` | Enable VNet + private endpoints |
+| `search_replica_count` | `1` | AI Search replicas. 2+ for a query SLA / HA. Each replica increases Search cost |
+| `search_partition_count` | `1` | AI Search partitions. Increase for larger indexes / throughput. Partitions multiply Search cost |
+| `alert_email` | `""` | Email for metric-alert notifications. Empty = alerts created without a notification target |
 
 ---
 
@@ -380,36 +431,38 @@ Variables common to both configs:
 
 ```
 azure-rag-foundry/
-├── terraform/                  # Production config (standard tier, MSI, VNet-ready)
+├── modules/                    # Shared Terraform modules (thin roots compose these)
+│   ├── ai/                     # Azure OpenAI + model deployments, AI Search
+│   ├── app/                    # App Service Plan + Web App, Log Analytics, App Insights
+│   ├── identity/               # Entra app registration, generated per-topic app roles
+│   ├── storage/               # Storage account, documents container, sample-doc upload
+│   └── search_dataplane/       # AI Search index, datasource, skillset, indexer (chunked)
+├── terraform/                  # Production root (standard tier, MSI, VNet-ready)
 │   ├── main.tf                 # providers, resource group, IP detection
 │   ├── locals.tf               # naming, network access logic
-│   ├── variables.tf            # variables (app_service_sku, enable_vnet_integration)
+│   ├── variables.tf            # variables (topics, public_tier_mode, app_service_sku, …)
 │   ├── network.tf              # VNet, subnets, private DNS zones, private endpoints
-│   ├── ai_services.tf          # Azure OpenAI + model deployments, AI Search (standard)
-│   ├── storage.tf              # Storage account, documents container, sample docs
-│   ├── compute.tf              # App Service Plan + Web App (Easy Auth, Managed Identity)
-│   ├── security.tf             # App Registration, App Roles, RBAC assignments
-│   ├── search_dataplane.tf     # AI Search data plane: index, datasources, skillset, indexers
+│   ├── ai_services.tf          # module "ai" + Search RBAC
+│   ├── storage.tf              # module "storage"
+│   ├── compute.tf              # module "app" + app settings
+│   ├── security.tf             # module "identity" + Easy Auth FIC identity + App Service RBAC
+│   ├── monitoring.tf           # Diagnostic settings -> Log Analytics + metric alerts
+│   ├── search_dataplane.tf     # module "search_dataplane"
 │   └── outputs.tf
-├── terraform-free/             # Free-tier config (API keys, no VNet, zero-cost testing)
-│   ├── main.tf
-│   ├── locals.tf
-│   ├── variables.tf
-│   ├── ai_services.tf          # AI Search free tier (API keys, no MSI)
-│   ├── storage.tf
-│   ├── compute.tf
-│   ├── security.tf
-│   ├── search_dataplane.tf     # uses OpenAI API key in skillset (no MSI)
-│   └── outputs.tf
+├── terraform-free/             # Free-tier root (API keys, no VNet, zero-cost testing)
 ├── app/
-│   ├── app.py                  # FastAPI: /chat (SSE), /branding, /, /health
+│   ├── app.py                  # FastAPI: landing /, chat /t/<topic>, /admin, /api/* 
+│   ├── access.py               # access-control contract (roles → topic×tier filter)
 │   ├── requirements.txt
 │   └── static/
-│       └── index.html          # Aria chat UI
-└── sample-docs/
-    ├── public/                 # uploaded automatically by terraform apply
-    ├── internal/
-    └── confidential/
+│       ├── landing.html        # topic cards
+│       ├── chat.html           # topic-scoped chat UI
+│       └── admin.html          # document manager
+├── tests/
+│   └── test_access.py          # regression tests for the access filter (topic × tier)
+└── sample-docs/                # uploaded automatically by terraform apply
+    ├── hr/{general,internal,confidential}/
+    └── it/{general,internal,confidential}/
 ```
 
 ---
@@ -422,29 +475,41 @@ The infrastructure changes in [Going to Production](#going-to-production) handle
 
 - **Conditional Access** — enforce MFA and compliant-device policies on the Entra ID app registration. Aria inherits whatever Conditional Access policies your tenant applies to enterprise apps, but verify they're actually in effect.
 - **OpenAI content filtering** — Azure OpenAI has built-in content filters (prompt shields, jailbreak detection). Review the default filter configuration in the Azure portal and tighten it if users could submit adversarial inputs.
+- **Azure AI Content Safety (recommended next layer)** — the system prompt alone is not an enterprise safety boundary. For adversarial environments, add [Azure AI Content Safety](https://learn.microsoft.com/en-us/azure/ai-services/content-safety/overview) in front of the model: screen the user prompt before search (prompt-injection / jailbreak detection), optionally screen retrieved context, and moderate the generated answer before returning it — logging each decision to Application Insights. Terraform can provision the resource and wire app settings, but enforcement is implemented in the app (`app.py`). This is a clean standalone increment and is intentionally not enabled by default.
 - **App Role assignment review** — `Internal.Read` and `Confidential.Read` are powerful. Use Entra ID *groups* rather than individual users so access is managed through your existing group lifecycle (joiners/movers/leavers). Review assignments quarterly.
-- **Application secret rotation** — the Easy Auth client secret is set to expire in 2099. Consider a shorter window (1–2 years) and automate rotation via Key Vault.
+- **Secretless Easy Auth** — built-in auth has no client secret to rotate or leak. App Service authenticates to Entra ID with a federated identity credential backed by a dedicated user-assigned managed identity (`use_managed_identity_auth = true` on the identity module). The MI's client id is the only value in app settings; there is no secret in app settings, Key Vault, or Terraform state. Workforce tenants only.
 - **Microsoft Defender for Cloud** — enable Defender plans for App Service and Storage. They surface misconfigurations and threat signals with minimal setup.
+
+#### Extending the access model
+
+The shipped model is two-dimensional: **topics** (the domain axis — HR, IT, finance, legal) × configurable **sensitivity tiers** (default `general` / `internal`), mapped to Entra app roles and enforced as an AI Search filter in `build_search_filter` (`app/access.py`). For finer control some deployments also want per-document group-level ACLs. To add that axis without re-architecting:
+
+- Add `domain_id` and `acl_groups` (Entra group object IDs) fields to the index schema in `search_dataplane.tf`, populated per chunk the same way `access_level` is.
+- Surface the user's Entra group claims to the app (groups claim in the token, with [group overage](https://learn.microsoft.com/en-us/entra/identity-platform/access-token-claims-reference#groups-overage-claim) handled via Microsoft Graph for users in many groups).
+- Build the Search filter from both axes, e.g. `access_level in (...) and (domain_id in (...) or acl_groups/any(g: search.in(g, '<user groups>')))`.
+
+Two patterns: a **shared index with ACL fields** (cheaper, simpler — what this repo uses) or an **index per tenant/domain** (stronger isolation, higher cost/ops). For the shared-index approach, add **regression tests** that prove a lower role cannot retrieve a higher-sensitivity document — that filter is the entire security boundary, so it must be tested, not assumed.
 
 ### Data & Compliance
 
-- **Document approval process** — define who is authorized to upload documents to each access tier before ingestion. A document landing in `public/` by mistake is a data leak.
+- **Document approval process** — define who is authorized to upload documents to each access tier before ingestion. A document landing in `general/` by mistake is a data leak.
 - **Personal data in documents** — if documents contain personal data (HR files, customer data), assess GDPR obligations: data subject access requests, retention limits, right to erasure. The search index holds chunked copies of all ingested content — deletion from blob alone is not enough (see [Managing the Knowledge Base](#managing-the-knowledge-base)).
 - **Data residency** — all resources default to `swedencentral`. Verify this meets your organization's data residency requirements before ingesting sensitive content.
 - **Log Analytics retention** — the workspace is set to 30 days. Adjust to match your compliance policy (`retention_in_days` in `compute.tf`).
 
 ### Reliability & Capacity
 
-- **AI Search replicas** — the Standard S1 SKU supports multiple replicas. Add at least one replica (`replica_count = 2`) for high availability — a single replica has no SLA.
+- **AI Search replicas** — the Standard SKU supports multiple replicas. A single replica has **no query SLA**. Set `search_replica_count = 2` for a query SLA (3 for read-write). Billing is replicas × partitions, so 2 replicas roughly doubles the Search base cost — this is left at `1` by default and is a deliberate cost decision.
 - **App Service scale-out** — configure auto-scale rules on the App Service Plan (CPU/memory thresholds) so the app handles concurrent users without degrading.
 - **OpenAI capacity (TPM)** — the default is 10K tokens per minute. At GPT-4o rates, that's roughly 5–10 concurrent users before throttling. Increase `openai_capacity` in `terraform.tfvars` based on expected load.
 - **Search index backup** — the index can be fully rebuilt by deleting and recreating the AI Search data plane resources via `terraform apply`. Blob storage is the source of truth — the indexers rebuild the entire index from it.
 
 ### Monitoring & Cost
 
-- **Application Insights alerts** — set up alert rules on `requests/failed` rate and `dependencies/failed` (OpenAI and Search calls). A spike in failures usually means a quota limit or a model retirement.
+- **Built-in diagnostics & alerts** — `monitoring.tf` already sends App Service, OpenAI, AI Search, and Storage logs/metrics to Log Analytics, and provisions metric alerts for App Service 5xx + latency, AI Search throttling, and OpenAI errors. Set `alert_email` in `terraform.tfvars` to receive notifications.
+- **Indexer-failure alerting** — indexer run failures are a data-plane signal, not a platform metric. Now that Search diagnostics flow to Log Analytics, add a scheduled **log-query alert** on the Search `OperationLogs` for indexer errors (embedding quota exceeded, storage access errors) to catch stale results before users do.
 - **OpenAI budget alert** — token costs are unpredictable with user-driven input. Set a monthly budget alert in Azure Cost Management scoped to the resource group.
-- **Usage dashboard** — the Log Analytics workspace already collects App Service logs. Build a simple workbook tracking daily active users, average response latency, and OpenAI token consumption to spot anomalies early.
+- **Usage dashboard** — build a workbook over the Log Analytics data tracking daily active users, average response latency, and OpenAI token consumption to spot anomalies early.
 
 ### Ongoing Operations
 

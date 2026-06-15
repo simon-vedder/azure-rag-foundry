@@ -21,6 +21,10 @@ terraform {
       source  = "hashicorp/http"
       version = "~> 3.0"
     }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.12"
+    }
   }
 }
 
@@ -59,6 +63,14 @@ resource "terraform_data" "cleanup_alerts" {
       for type in "microsoft.insights/metricalerts" "microsoft.insights/activitylogalerts" "microsoft.insights/scheduledqueryrules"; do
         ids=$(az resource list --resource-group "$RG" --resource-type "$type" --query "[].id" -o tsv 2>/dev/null)
         [ -n "$ids" ] && echo "$ids" | xargs az resource delete --ids 2>/dev/null
+      done
+      # Smart-detector alert rules (auto-created with Application Insights) are not returned by
+      # `az resource list`, so query and delete them via the alerts-management API — otherwise they
+      # block resource group deletion.
+      SUB=$(az account show --query id -o tsv 2>/dev/null)
+      sd_ids=$(az rest --method get --url "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/microsoft.alertsmanagement/smartDetectorAlertRules?api-version=2021-04-01" --query "value[].id" -o tsv 2>/dev/null)
+      for id in $sd_ids; do
+        az rest --method delete --url "https://management.azure.com$id?api-version=2021-04-01" 2>/dev/null
       done
       exit 0
     EOT

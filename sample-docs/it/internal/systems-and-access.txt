@@ -1,0 +1,52 @@
+Contoso Technologies — Systems & Access (INTERNAL)
+===================================================
+Classification: INTERNAL — Employees only, do not share externally
+Owner: IT Infrastructure | Last updated: May 2026
+
+This document lists the core internal systems and how access is granted. For employees only.
+
+1. Identity and Access
+----------------------
+- Identity provider: Microsoft Entra ID (tenant: contoso-tech.onmicrosoft.com).
+- Access is role-based via Entra security groups. Request membership in the IT portal;
+  approvals route to the resource owner.
+- Privileged roles (admin) require Privileged Identity Management (PIM) activation with
+  justification and are time-boxed to 8 hours.
+
+2. Network and Remote Access
+----------------------------
+- Corporate VPN: GlobalProtect. Required for access to on-prem ERP test environments
+  and the data centre management network.
+- Office networks segmented: Corp, Guest, Lab. Lab is isolated and has no internet egress.
+- Zero-trust rollout in progress: web apps are moving behind Entra Application Proxy so
+  VPN is needed less over time.
+
+3. Core Systems Inventory
+-------------------------
+  System                 Owner            Access path
+  ContosoERP (prod)      ERP Platform     Entra group "erp-prod-users"
+  ContosoERP (test)      ERP Platform     VPN + Entra group "erp-test"
+  Azure subscriptions    Cloud Platform   PIM-activated roles, per-subscription
+  Source control         Engineering      GitHub Enterprise SSO
+  CI/CD                  Engineering      GitHub Actions + Azure DevOps (legacy)
+  Data warehouse         Data team        Entra group "dwh-readers"/"dwh-authors"
+
+4. Endpoint Management
+----------------------
+- Devices enrolled in Microsoft Intune; compliance policies enforce encryption, OS
+  patch level, and screen lock before granting app access (conditional access).
+- Software deployment via Intune (Windows) and Jamf-equivalent profiles (macOS).
+
+5. Change Management
+--------------------
+- Production changes follow the standard change process: ticket, peer review, approval,
+  scheduled window. Emergency changes need post-hoc review within 48 hours.
+- Maintenance windows: Sundays 22:00–02:00 CET unless otherwise announced.
+
+6. Joiner / Mover / Leaver
+--------------------------
+- Joiner: accounts and baseline access provisioned from the HR feed on start date.
+- Mover: access recertified when someone changes team; stale group memberships removed.
+- Leaver: accounts disabled at end of last day, devices wiped on return.
+
+Questions: itinfra@contoso-tech.internal

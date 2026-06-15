@@ -4,9 +4,6 @@ resource "random_string" "suffix" {
   special = false
 }
 
-resource "random_uuid" "internal_read_role" {}
-resource "random_uuid" "confidential_read_role" {}
-
 locals {
   suffix         = random_string.suffix.result
   rg_name        = "${var.prefix}-rag-rg-${local.suffix}"
@@ -18,6 +15,8 @@ locals {
   vnet_name      = "${var.prefix}-vnet-${local.suffix}"
   law_name       = "${var.prefix}-law-${local.suffix}"
   appi_name      = "${var.prefix}-appi-${local.suffix}"
+  uami_name      = "${var.prefix}-id-${local.suffix}" # Easy Auth federated-credential identity
+  ag_name        = "${var.prefix}-ag-${local.suffix}"
   entra_app_name = "${var.prefix}-rag-${local.suffix}"
 
   app_url = "https://${local.app_name}.azurewebsites.net"
@@ -41,5 +40,4 @@ locals {
   # reach the storage account via the trusted Azure services bypass.
   storage_network_rules_enabled = var.enable_vnet_integration
   storage_allowed_ips           = var.enable_vnet_integration ? [local.client_ip] : []
-
 }

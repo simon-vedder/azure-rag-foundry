@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aria</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --accent: #6366f1; --accent-dark: #4f46e5; --accent-light: #eef2ff;
+      --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0;
+      --text: #0f172a; --text-muted: #64748b; --header-bg: #0f172a;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg); min-height: 100vh; display: flex; flex-direction: column;
+      color: var(--text); font-size: 15px; line-height: 1.6;
+    }
+    header {
+      background: var(--header-bg); height: 60px; padding: 0 24px;
+      display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .logo-icon { width: 34px; height: 34px; flex-shrink: 0; }
+    .brand { display: flex; flex-direction: column; line-height: 1.2; }
+    .brand-name { font-size: 1.05rem; font-weight: 700; color: #fff; letter-spacing: -0.01em; }
+    .brand-sub { font-size: 0.7rem; color: rgba(255,255,255,0.38); letter-spacing: 0.04em; text-transform: uppercase; }
+    .header-link {
+      margin-left: auto; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+      color: rgba(255,255,255,0.7); padding: 6px 16px; border-radius: 7px; cursor: pointer;
+      font-size: 0.82rem; text-decoration: none; transition: background 0.15s, color 0.15s; display: none;
+    }
+    .header-link:hover { background: rgba(255,255,255,0.13); color: #fff; }
+    main { flex: 1; max-width: 920px; width: 100%; margin: 0 auto; padding: 48px 24px; }
+    .intro h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+    .intro p { color: var(--text-muted); margin-top: 6px; }
+    .grid { margin-top: 32px; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      padding: 22px; text-decoration: none; color: inherit; display: flex; flex-direction: column;
+      gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s;
+    }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,0.08); border-color: var(--accent); }
+    .card-icon {
+      width: 40px; height: 40px; border-radius: 10px; background: var(--accent-light);
+      display: flex; align-items: center; justify-content: center; color: var(--accent); font-weight: 700; font-size: 1.1rem;
+    }
+    .card-title { font-size: 1.05rem; font-weight: 700; }
+    .card-cta { color: var(--accent); font-size: 0.85rem; font-weight: 600; margin-top: auto; }
+    .state { color: var(--text-muted); margin-top: 40px; text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="logo" href="/">
+      <svg class="logo-icon" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="17,3 31,17 17,31 3,17" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="1"/>
+        <polygon points="17,7 28,17 17,27 6,17" fill="rgba(99,102,241,0.55)"/>
+        <polygon points="17,7 28,17 17,17" fill="rgba(139,92,246,0.75)"/>
+        <polygon points="17,7 17,17 6,17" fill="rgba(99,102,241,0.85)"/>
+        <circle cx="17" cy="17" r="2.6" fill="white" opacity="0.9"/>
+      </svg>
+      <div class="brand">
+        <span class="brand-name">Aria</span>
+        <span class="brand-sub" id="brand-sub">by Contoso</span>
+      </div>
+    </a>
+    <a class="header-link" id="admin-link" href="/admin">Document manager</a>
+  </header>
+
+  <main>
+    <div class="intro">
+      <h1>Your assistants</h1>
+      <p>Choose a topic to start a grounded conversation over its documents.</p>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="state" id="state">Loading…</div>
+  </main>
+
+  <script>
+    function initials(name) {
+      return name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    }
+    (async () => {
+      const grid = document.getElementById('grid');
+      const state = document.getElementById('state');
+      try {
+        const data = await fetch('/api/topics').then(r => {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        });
+        if (data.company_name) {
+          document.getElementById('brand-sub').textContent = 'by ' + data.company_name;
+          document.title = 'Aria — ' + data.company_name;
+        }
+        if (data.can_admin) document.getElementById('admin-link').style.display = 'inline-block';
+
+        const topics = data.topics || [];
+        if (topics.length === 0) {
+          state.textContent = 'You don’t have access to any topics yet. Contact your administrator.';
+          return;
+        }
+        // Exactly one accessible topic → go straight into it.
+        if (topics.length === 1) {
+          window.location.replace('/t/' + topics[0].slug);
+          return;
+        }
+        state.style.display = 'none';
+        for (const t of topics) {
+          const a = document.createElement('a');
+          a.className = 'card';
+          a.href = '/t/' + t.slug;
+          a.innerHTML = `
+            <div class="card-icon">${initials(t.display)}</div>
+            <div class="card-title">${t.display}</div>
+            <div class="card-cta">Open chat →</div>`;
+          grid.appendChild(a);
+        }
+      } catch (e) {
+        state.textContent = 'Could not load topics. Please refresh.';
+      }
+    })();
+  </script>
+</body>
+</html>

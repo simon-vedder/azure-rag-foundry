@@ -1,81 +1,63 @@
-resource "azurerm_cognitive_account" "openai" {
-  name                  = local.oai_name
-  location              = azurerm_resource_group.main.location
-  resource_group_name   = azurerm_resource_group.main.name
-  kind                  = "OpenAI"
-  sku_name              = "S0"
-  # Required for private endpoint support on Cognitive Services accounts.
-  custom_subdomain_name = local.oai_name
+module "ai" {
+  source = "../modules/ai"
 
-  # Public access stays enabled so the AI Search indexer's AzureOpenAIEmbeddingSkill can reach OpenAI.
-  # The indexer runs outside the VNet and cannot use the private endpoint.
-  # Access is still secured by RBAC (managed identity); the private endpoint provides
-  # a private path for App Service traffic from within the VNet.
-  public_network_access_enabled = true
-}
-
-resource "azurerm_cognitive_deployment" "chat" {
-  name                 = var.openai_model
-  cognitive_account_id = azurerm_cognitive_account.openai.id
-
-  model {
-    format  = "OpenAI"
-    name    = var.openai_model
-    version = var.openai_model_version
-  }
-
-  sku {
-    name     = "GlobalStandard"
-    capacity = var.openai_capacity
-  }
-}
-
-resource "azurerm_cognitive_deployment" "embedding" {
-  name                 = "text-embedding-3-small"
-  cognitive_account_id = azurerm_cognitive_account.openai.id
-
-  model {
-    format  = "OpenAI"
-    name    = "text-embedding-3-small"
-    version = "1"
-  }
-
-  sku {
-    name     = "GlobalStandard"
-    capacity = 10
-  }
-}
-
-resource "azurerm_search_service" "main" {
-  name                = local.srch_name
+  openai_name         = local.oai_name
+  search_name         = local.srch_name
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_resource_group.main.location
-  sku                 = "standard"
 
-  public_network_access_enabled = local.search_public_access
-  allowed_ips                   = local.search_allowed_ips
+  openai_model         = var.openai_model
+  openai_model_version = var.openai_model_version
+  openai_capacity      = var.openai_capacity
+  embedding_model      = var.embedding_model
 
-  local_authentication_enabled = false
+  search_sku             = "standard"
+  search_replica_count   = var.search_replica_count
+  search_partition_count = var.search_partition_count
+
+  # API keys disabled — RBAC-only auth via managed identities.
+  search_local_auth_enabled    = false
+  search_identity_enabled      = true
+  search_public_network_access = local.search_public_access
+  search_allowed_ips           = local.search_allowed_ips
   semantic_search_sku          = "free"
-
-  identity {
-    type = "SystemAssigned"
-  }
-
-  replica_count   = 1 # PROD UPGRADE: increase for HA
-  partition_count = 1
 }
 
 # RBAC: Search service managed identity → Storage (read blobs for indexing).
 resource "azurerm_role_assignment" "search_storage" {
-  scope                = azurerm_storage_account.main.id
+  scope                = module.storage.id
   role_definition_name = "Storage Blob Data Reader"
-  principal_id         = azurerm_search_service.main.identity[0].principal_id
+  principal_id         = module.ai.search_principal_id
 }
 
 # RBAC: Search service managed identity → Azure OpenAI (embedding skill in indexer pipeline).
 resource "azurerm_role_assignment" "search_openai" {
-  scope                = azurerm_cognitive_account.openai.id
+  scope                = module.ai.openai_id
   role_definition_name = "Cognitive Services OpenAI User"
-  principal_id         = azurerm_search_service.main.identity[0].principal_id
+  principal_id         = module.ai.search_principal_id
+}
+
+# The Search data plane (index/datasource/skillset/indexer) is provisioned from the machine running
+# terraform via `az rest`, and Search local auth is disabled — so the deployer's own identity needs
+# Search data-plane RBAC, scoped to this search service only.
+resource "azurerm_role_assignment" "deployer_search_contributor" {
+  scope                = module.ai.search_id
+  role_definition_name = "Search Service Contributor"
+  principal_id         = data.azuread_client_config.current.object_id
+}
+
+resource "azurerm_role_assignment" "deployer_search_index" {
+  scope                = module.ai.search_id
+  role_definition_name = "Search Index Data Contributor"
+  principal_id         = data.azuread_client_config.current.object_id
+}
+
+# RBAC is eventually consistent — let the deployer assignments propagate before the data-plane
+# provisioner calls the Search REST API, otherwise the first apply can fail with 403.
+resource "time_sleep" "search_rbac_propagation" {
+  depends_on = [
+    azurerm_role_assignment.deployer_search_contributor,
+    azurerm_role_assignment.deployer_search_index,
+  ]
+  create_duration = "60s"
 }

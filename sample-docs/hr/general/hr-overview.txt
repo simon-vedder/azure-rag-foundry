@@ -1,0 +1,41 @@
+Contoso Technologies — HR Overview
+===================================
+Classification: GENERAL — Visible to all employees
+
+Welcome to the People & Culture team at Contoso Technologies. This overview answers
+the most common questions employees have about HR. Anyone in the company can read it.
+
+How to reach HR
+---------------
+- HR service desk: people@contoso-tech.internal
+- HR portal: https://people.contoso-tech.internal
+- Walk-in hours: Stockholm HQ, 2nd floor, Tue & Thu 13:00–15:00 CET
+- Confidential whistleblowing line: ethics@contoso-tech.internal (handled by external ombudsman)
+
+Working at Contoso
+------------------
+- Standard week: 40 hours, flexible core hours 10:00–15:00 in your local time zone.
+- Hybrid policy: minimum 2 office days per week; teams may agree on fixed anchor days.
+- Offices: Stockholm (HQ), Berlin, London, Singapore. Remote-friendly within those countries.
+
+Benefits (summary)
+------------------
+- 30 days paid annual leave (Sweden); local statutory minimums apply elsewhere.
+- Occupational pension via Collectum (Sweden) or local equivalent.
+- Wellness allowance: €400/year (gym, equipment, courses).
+- Parental leave topped up to 90% of salary for the first 6 months.
+- Annual learning budget: €1,500 per employee for courses, books, and conferences.
+
+Time off and leave
+------------------
+- Request leave in the HR portal at least 2 weeks ahead for planned absence.
+- Sick leave: notify your manager and log it in the portal the same day.
+- Public holidays follow the calendar of your office location.
+
+Onboarding
+----------
+New joiners get a 30-60-90 day plan, a buddy, and an IT starter kit (see the IT topic
+for device setup). Your manager schedules a probation review at the 90-day mark.
+
+For internal policy detail (the full employee handbook) you need the HR Internal Reader
+role. Compensation banding is restricted to the HR Confidential Reader role.
