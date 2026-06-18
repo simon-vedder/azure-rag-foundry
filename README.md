@@ -23,7 +23,7 @@ Two Terraform configs are included:
   - [2. Check free AI Search quota](#2-check-free-ai-search-quota-free-config-only)
   - [3. Configure Terraform](#3-configure-terraform)
   - [4. Deploy infrastructure and app](#4-deploy-infrastructure-and-app)
-  - [5. Grant admin consent](#5-grant-admin-consent-entra-admin-required)
+  - [5. Grant admin consent](#5-grant-admin-consent-usually-not-needed)
   - [6. Assign app roles to users](#6-assign-app-roles-to-users)
   - [7. Upload documents](#7-upload-documents)
   - [8. Open the app](#8-open-the-app)
@@ -72,10 +72,11 @@ Browser
   │  (Entra ID Easy Auth — blocks unauthenticated requests)
   ▼
 App Service — FastAPI (Python 3.12)
-  ├── /          → chat UI (index.html)
-  ├── /chat      → SSE streaming: embed → search → GPT-4o stream
-  ├── /branding  → company name + logo URL from App Settings
-  └── /health    → liveness check
+  ├── /            → landing page (cards for the topics a user can access)
+  ├── /t/<topic>   → topic-scoped chat UI
+  ├── /admin       → document manager (Content.Admin holders)
+  ├── /api/chat    → SSE streaming: embed → search → GPT-4o stream
+  └── /health      → liveness check
 
 App Service Managed Identity (RBAC, no keys)
   ├── Azure OpenAI     — GPT-4o (chat) + text-embedding-3-small
@@ -84,7 +85,7 @@ App Service Managed Identity (RBAC, no keys)
 ```
 
 **Test mode (default):** App Service reaches backend services over public endpoints using RBAC. No VNet needed.  
-**Production mode:** Private endpoints + VNet integration lock down all backend traffic. Flip three variables.
+**Production mode:** Private endpoints + VNet integration move backend traffic onto a private network. Flip one variable (`enable_vnet_integration = true`); `terraform/` already defaults to P1v3 and the standard Search tier.
 
 ---
 
@@ -142,9 +143,14 @@ terraform apply
 
 This takes 5–10 minutes. Terraform creates all infrastructure and deploys the app in one step — it zips `app/` automatically and deploys it to App Service via `zip_deploy_file`.
 
-### 5. Grant admin consent (Entra admin required)
+### 5. Grant admin consent (usually not needed)
 
-The App Registration requests `User.Read` from Microsoft Graph. An Entra admin must grant tenant-wide consent:
+Aria requests **no Microsoft Graph permissions**. It reads the user's identity and roles from the
+signed Easy Auth token and never calls Graph, so in most tenants there is nothing to consent to — skip
+straight to assigning users.
+
+Only if your tenant blocks user consent for enterprise apps does an admin need to consent to the app
+once (for the basic OpenID sign-in scopes) before anyone can log in:
 
 ```bash
 CLIENT_ID=$(terraform -chdir=terraform-free output -raw entra_app_client_id)
@@ -363,9 +369,9 @@ enable_vnet_integration = true
 
 Run `terraform apply`. With `enable_vnet_integration = true`:
 
-- Private endpoints are created for OpenAI, AI Search, and Storage
-- Public network access is disabled on all backend services
-- App Service is integrated into the VNet via subnet delegation
+- Private endpoints are created for OpenAI, AI Search, and Storage, so App Service reaches them privately
+- App Service is integrated into the VNet via subnet delegation, routing its outbound traffic through the VNet
+- Public access to the backends is restricted to the deployer's IP (plus trusted Azure services) rather than fully disabled — the AI Search indexer and Terraform's data-plane provisioning still need a reachable path
 
 > **Cost tip:** Buy a 1-year reserved instance for P1v3 on day one — saves ~35% (~$130 → ~$85/month).
 
@@ -628,7 +634,7 @@ EOF
 # 4. Deploy everything (~10 min)
 cd terraform-free && terraform init && terraform apply
 
-# 5. Grant admin consent (Entra admin required)
+# 5. (Only if your tenant blocks user consent) grant admin consent — Aria requests no Graph permissions
 az ad app permission admin-consent --id $(terraform output -raw entra_app_client_id)
 
 # 6. Open the app
@@ -651,7 +657,7 @@ EOF
 # 3. Deploy everything (~10 min)
 cd terraform && terraform init && terraform apply
 
-# 4. Grant admin consent (Entra admin required)
+# 4. (Only if your tenant blocks user consent) grant admin consent — Aria requests no Graph permissions
 az ad app permission admin-consent --id $(terraform output -raw entra_app_client_id)
 
 # 5. Open the app
