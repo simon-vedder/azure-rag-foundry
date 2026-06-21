@@ -87,7 +87,6 @@
     .doc-icon { width: 14px; height: 14px; flex-shrink: 0; color: var(--accent); margin-top: 2px; }
     .doc-desc { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; line-height: 1.5; padding-left: 22px; }
     .sidebar-empty { font-size: 0.8rem; color: var(--text-muted); }
-    .empty-chips { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 380px; }
     /* On small screens the sidebar overlays the chat (slides in/out) instead of squeezing it. */
     @media (max-width: 760px) {
       #body-row { position: relative; }
@@ -196,13 +195,6 @@
       b.addEventListener('click', () => { input.value = q; sendMessage(); });
       return b;
     }
-    function renderEmptyChips(questions) {
-      const es = document.getElementById('empty-state');
-      if (!es || !questions.length || es.querySelector('.empty-chips')) return;
-      const wrap = document.createElement('div'); wrap.className = 'empty-chips';
-      questions.slice(0, 4).forEach(q => wrap.appendChild(makeChip(q)));
-      es.appendChild(wrap);
-    }
     async function loadOverview() {
       const box = document.getElementById('sidebar-content');
       try {
@@ -214,7 +206,6 @@
           sec.innerHTML = '<h3>Try asking</h3>';
           suggestedQuestions.forEach(q => sec.appendChild(makeChip(q)));
           box.appendChild(sec);
-          renderEmptyChips(suggestedQuestions);
         }
         const docs = ov.documents || [];
         if (docs.length) {
@@ -301,30 +292,22 @@
       addUserMessage(message); setLoading(true);
       const bubble = addAIBubble();
       try {
+        // Single JSON response (no SSE) — Easy Auth cannot reliably relay a streamed body.
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ topic: TOPIC, message, history }),
         });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const reader = res.body.getReader(); const decoder = new TextDecoder();
-        let fullText = ''; let first = true;
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const lines = decoder.decode(value, { stream: true }).split('\n');
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            const payload = line.slice(6).trim();
-            if (payload === '[DONE]') break;
-            try {
-              const parsed = JSON.parse(payload);
-              if (parsed.error) { bubble.classList.add('error'); bubble.textContent = parsed.error; first = false; }
-              else if (parsed.content) { first = false; fullText += parsed.content; bubble.innerHTML = renderMarkdown(fullText); chat.scrollTop = chat.scrollHeight; }
-            } catch (_) {}
-          }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.error) {
+          bubble.classList.add('error');
+          bubble.textContent = data.error || ('HTTP ' + res.status);
+          return;
         }
-        if (first) bubble.textContent = 'No response received.';
+        const fullText = data.content || '';
+        if (!fullText) { bubble.textContent = 'No response received.'; return; }
+        bubble.innerHTML = renderMarkdown(fullText);
+        chat.scrollTop = chat.scrollHeight;
         history.push({ role: 'user', content: message });
         history.push({ role: 'assistant', content: fullText });
         if (history.length > 20) history = history.slice(-20);
@@ -338,7 +321,6 @@
     clearBtn.addEventListener('click', () => {
       history = []; persist();
       chat.innerHTML = `<div id="empty-state"><svg class="empty-gem" width="56" height="56" viewBox="0 0 34 34" fill="none"><polygon points="17,7 28,17 17,27 6,17" fill="#6366f1"/><polygon points="17,7 28,17 17,17" fill="#8b5cf6"/><polygon points="17,7 17,17 6,17" fill="#6366f1" opacity="0.85"/><circle cx="17" cy="17" r="2.6" fill="white"/></svg><h2>How can I help you?</h2><p>Ask away — your previous conversation was cleared.</p></div>`;
-      renderEmptyChips(suggestedQuestions);
     });
     input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
     input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 140) + 'px'; });

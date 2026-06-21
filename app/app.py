@@ -164,7 +164,11 @@ def build_context(chunks: list[dict]) -> str:
     return "\n\n---\n\n".join(f"[{chunk['file']}]\n{chunk['content']}" for chunk in chunks)
 
 
-def stream_response(context: str, message: str, history: list[Message], topic_display: str):
+def generate_answer(context: str, message: str, history: list[Message], topic_display: str) -> str:
+    # NON-STREAMING by design. Azure App Service Easy Auth proxies every response and cannot
+    # reliably relay a long-lived text/event-stream body — it cuts the stream mid-answer
+    # ("Error while copying content to a stream" in the Easy Auth middleware). Returning the full
+    # answer in a single JSON response is delivered intact behind Easy Auth.
     system_prompt = (
         f"You are Aria, an enterprise assistant for the {topic_display} topic at {COMPANY_NAME}. "
         "Answer the user's question using ONLY the document excerpts below. "
@@ -178,12 +182,10 @@ def stream_response(context: str, message: str, history: list[Message], topic_di
         messages.append({"role": turn.role, "content": turn.content})
     messages.append({"role": "user", "content": message})
 
-    stream = openai_client.chat.completions.create(
-        model=CHAT_DEPLOYMENT, messages=messages, temperature=0, stream=True,
+    resp = openai_client.chat.completions.create(
+        model=CHAT_DEPLOYMENT, messages=messages, temperature=0,
     )
-    for chunk in stream:
-        if chunk.choices and chunk.choices[0].delta.content:
-            yield chunk.choices[0].delta.content
+    return resp.choices[0].message.content or ""
 
 
 # ── Topic overview (suggested questions + readable document descriptions) ─────
@@ -305,7 +307,7 @@ async def list_topics(request: Request):
 
 
 @app.get("/api/topics/{topic}/overview")
-async def topic_overview(topic: str, request: Request):
+def topic_overview(topic: str, request: Request):
     roles = require_roles(request)
     if topic not in TOPICS:
         raise HTTPException(status_code=404, detail="Unknown topic")
@@ -344,7 +346,7 @@ async def topic_overview(topic: str, request: Request):
 
 
 @app.post("/api/chat")
-async def chat(body: ChatRequest, request: Request):
+def chat(body: ChatRequest, request: Request):
     roles = require_roles(request)
 
     if body.topic not in TOPICS:
@@ -355,21 +357,25 @@ async def chat(body: ChatRequest, request: Request):
 
     topic_display = TOPICS[body.topic]
 
-    def generate():
-        try:
-            embedding = get_embedding(body.message)
-            chunks = search_documents(body.message, embedding, access_filter)
-            context = build_context(chunks)
-            for token in stream_response(context, body.message, body.history, topic_display):
-                yield f"data: {json.dumps({'content': token})}\n\n"
-        except HttpResponseError as e:
-            yield f"data: {json.dumps({'error': f'Search error: {e.error.code if e.error else str(e)}'})}\n\n"
-        except Exception:
-            logger.exception("Unhandled error in /api/chat")
-            yield f"data: {json.dumps({'error': 'An internal error occurred. Please try again.'})}\n\n"
-        yield "data: [DONE]\n\n"
-
-    return StreamingResponse(generate(), media_type="text/event-stream")
+    # Sync handler → runs in Starlette's threadpool (blocking embed/search/LLM off the event loop).
+    # Returns the full answer in one JSON response (no SSE — see generate_answer for why).
+    try:
+        embedding = get_embedding(body.message)
+        chunks = search_documents(body.message, embedding, access_filter)
+        context = build_context(chunks)
+        answer = generate_answer(context, body.message, body.history, topic_display)
+        return {"content": answer}
+    except HttpResponseError as e:
+        return JSONResponse(
+            status_code=502,
+            content={"error": f"Search error: {e.error.code if e.error else str(e)}"},
+        )
+    except Exception:
+        logger.exception("Unhandled error in /api/chat")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "An internal error occurred. Please try again."},
+        )
 
 
 # ── Admin / document manager ────────────────────────────────────────────────
@@ -399,7 +405,7 @@ async def admin_topic_list(request: Request):
 
 
 @app.get("/api/admin/documents")
-async def admin_list_documents(request: Request, topic: str):
+def admin_list_documents(request: Request, topic: str):
     _require_admin(request, topic)
     docs: list[dict] = []
     for blob in blob_container.list_blobs(name_starts_with=f"{topic}/", include=["metadata"]):
@@ -422,7 +428,7 @@ async def admin_list_documents(request: Request, topic: str):
 
 
 @app.post("/api/admin/documents")
-async def admin_upload_document(
+def admin_upload_document(
     request: Request,
     topic: str = Form(...),
     access_level: str = Form(...),
@@ -442,7 +448,7 @@ async def admin_upload_document(
     ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
     content_type = CONTENT_TYPES.get(ext, "application/octet-stream")
 
-    data = await file.read()
+    data = file.file.read()
     blob_container.upload_blob(
         name=blob_name,
         data=data,
@@ -454,7 +460,7 @@ async def admin_upload_document(
 
 
 @app.delete("/api/admin/documents")
-async def admin_delete_document(request: Request, topic: str, path: str):
+def admin_delete_document(request: Request, topic: str, path: str):
     _require_admin(request, topic)
     # Defence in depth: the blob must live under the caller's topic regardless of the path passed in.
     if not path.startswith(f"{topic}/") or len(path.split("/", 2)) != 3:
@@ -475,7 +481,7 @@ async def admin_delete_document(request: Request, topic: str, path: str):
 
 
 @app.post("/api/admin/reindex")
-async def admin_reindex(request: Request, topic: str = Form(...)):
+def admin_reindex(request: Request, topic: str = Form(...)):
     # Reindexing runs the single shared indexer over the whole container; topic is required only to
     # prove the caller administers at least one topic.
     _require_admin(request, topic)
