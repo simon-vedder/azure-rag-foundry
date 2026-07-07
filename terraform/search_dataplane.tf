@@ -21,9 +21,17 @@ module "search_dataplane" {
 
   semantic_enabled = true
 
+  # With the private posture, backends are firewalled; the indexer must run in the private execution
+  # environment to reach Storage and OpenAI over the shared private links. Standard (multi-tenant)
+  # would hit them over the blocked public path. No shared private links exist when VNet is off.
+  execution_environment = var.enable_vnet_integration ? "private" : null
+
   depends_on = [
     azurerm_role_assignment.search_storage,
     azurerm_role_assignment.search_openai,
     time_sleep.search_rbac_propagation,
+    # Indexer blob reads + embedding-skill OpenAI calls go over the shared private links; they must
+    # be approved before the indexer runs, or the first indexing pass fails to reach either backend.
+    terraform_data.approve_shared_private_links,
   ]
 }

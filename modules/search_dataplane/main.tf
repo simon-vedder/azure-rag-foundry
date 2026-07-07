@@ -130,7 +130,16 @@ locals {
     skillsetName    = local.skillset_name
     targetIndexName = local.index_name
     schedule        = { interval = "PT1H" }
-    parameters      = { configuration = { dataToExtract = "contentAndMetadata", parsingMode = "default" } }
+    parameters = { configuration = merge(
+      { dataToExtract = "contentAndMetadata", parsingMode = "default" },
+      # In a private-network deployment the indexer must run in the search service's private
+      # execution environment so it reaches Storage (blob reads) and Azure OpenAI (embedding skill)
+      # over the shared private links. Left in the default (multi-tenant) environment it hits the
+      # firewalled backends over the public path, which Search surfaces as a misleading
+      # "Credentials provided in the connection string are invalid or have expired" error and
+      # indexes zero documents. Unset (standard) for the all-public free/dev configs.
+      var.execution_environment != null ? { executionEnvironment = var.execution_environment } : {}
+    ) }
   })
 
   # Shared bash helper: PUT a JSON body with the admin key when provided, Entra ID otherwise.

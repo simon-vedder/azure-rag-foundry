@@ -144,7 +144,13 @@ def get_embedding(text: str) -> list[float]:
 
 def search_documents(query: str, embedding: list[float], access_filter: str) -> list[dict]:
     # Hybrid search: vector + keyword (BM25) + optional semantic rerank, scoped by access_filter.
-    vector_query = VectorizedQuery(vector=embedding, k_nearest_neighbors=5, fields="embedding")
+    # k_nearest_neighbors is the vector *candidate* pool handed to RRF fusion and the semantic
+    # reranker — deliberately much larger than `top`. Too small a pool (e.g. 5) lets a cold HNSW
+    # graph return a slightly different approximate top-k on the first query after idle, dropping the
+    # relevant chunk from the candidate set entirely so neither fusion nor rerank can recover it —
+    # the user sees "I couldn't find that" once, then the correct answer on an identical retry. A
+    # wide pool (50) makes retrieval stable and cold-start-proof while `top` still bounds LLM context.
+    vector_query = VectorizedQuery(vector=embedding, k_nearest_neighbors=50, fields="embedding")
     kwargs: dict = {
         "search_text": query,
         "vector_queries": [vector_query],
@@ -171,10 +177,14 @@ def generate_answer(context: str, message: str, history: list[Message], topic_di
     # answer in a single JSON response is delivered intact behind Easy Auth.
     system_prompt = (
         f"You are Aria, an enterprise assistant for the {topic_display} topic at {COMPANY_NAME}. "
-        "Answer the user's question using ONLY the document excerpts below. "
-        "Do not use any knowledge from your training data. "
-        "If the answer is not contained in the excerpts, respond with exactly: "
-        "\"I couldn't find that in the available documents.\"\n\n"
+        "Use the document excerpts below as your only source of facts — do not add facts from your "
+        "own training data. Within that limit, reason like a helpful colleague: treat synonyms and "
+        "paraphrases as the same thing (for example \"vacation\", \"holiday\" and \"annual leave\" "
+        "refer to the same policy), and when the excerpts give a general, conditional, or "
+        "location-dependent answer, give that answer and state the condition instead of refusing — "
+        "even if they do not spell out the user's exact personal situation. "
+        "Respond with exactly \"I couldn't find that in the available documents.\" only when the "
+        "excerpts genuinely do not address the topic at all.\n\n"
         f"Document excerpts:\n{context}"
     )
     messages = [{"role": "system", "content": system_prompt}]

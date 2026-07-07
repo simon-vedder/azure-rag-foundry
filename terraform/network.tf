@@ -130,3 +130,70 @@ resource "azurerm_private_endpoint" "storage" {
     private_dns_zone_ids = [azurerm_private_dns_zone.blob.id]
   }
 }
+
+# Shared private links — the private path the AI Search *service* uses to reach OpenAI (embedding
+# skill) and Storage (indexer blob reads) once those backends stop accepting public traffic. Unlike
+# a private endpoint (which gives the App Service a private inbound path), a shared private link is
+# owned by the Search service and originates from inside its managed network. Only created with VNet
+# integration on; the free config keeps everything public.
+resource "azurerm_search_shared_private_link_service" "openai" {
+  count              = var.enable_vnet_integration ? 1 : 0
+  name               = "${local.srch_name}-spl-openai"
+  search_service_id  = module.ai.search_id
+  subresource_name   = "openai_account"
+  target_resource_id = module.ai.openai_id
+  request_message    = "Aria AI Search embedding skill"
+}
+
+resource "azurerm_search_shared_private_link_service" "blob" {
+  count              = var.enable_vnet_integration ? 1 : 0
+  name               = "${local.srch_name}-spl-blob"
+  search_service_id  = module.ai.search_id
+  subresource_name   = "blob"
+  target_resource_id = module.storage.id
+  request_message    = "Aria AI Search indexer blob access"
+}
+
+# A shared private link lands as a Pending private endpoint connection on the target and must be
+# approved on the target side. There is no first-class azurerm resource to approve a Search-owned
+# shared-private-link connection, so approve via the Azure CLI — the same local-exec/az pattern the
+# Search data plane already uses. Retry briefly because the connection appears asynchronously.
+resource "terraform_data" "approve_shared_private_links" {
+  count = var.enable_vnet_integration ? 1 : 0
+
+  triggers_replace = [
+    azurerm_search_shared_private_link_service.openai[0].id,
+    azurerm_search_shared_private_link_service.blob[0].id,
+  ]
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -e
+      approve_pending() {
+        local target_id="$1"
+        for attempt in $(seq 1 12); do
+          ids=$(az network private-endpoint-connection list --id "$target_id" \
+            --query "[?properties.privateLinkServiceConnectionState.status=='Pending'].id" -o tsv)
+          if [ -n "$ids" ]; then
+            for id in $ids; do
+              az network private-endpoint-connection approve --id "$id" \
+                --description "Approved by Terraform (Aria shared private link)" >/dev/null
+            done
+            return 0
+          fi
+          sleep 10
+        done
+        echo "No pending shared-private-link connection found on $target_id after retries" >&2
+        return 1
+      }
+      approve_pending "${module.ai.openai_id}"
+      approve_pending "${module.storage.id}"
+    EOT
+  }
+
+  depends_on = [
+    azurerm_search_shared_private_link_service.openai,
+    azurerm_search_shared_private_link_service.blob,
+  ]
+}

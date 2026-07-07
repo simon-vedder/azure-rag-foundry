@@ -20,6 +20,12 @@ variable "allowed_ips" {
   default = []
 }
 
+variable "trusted_services_bypass" {
+  description = "When network rules are enabled, allow the AzureServices trusted-services bypass. Set false for a strict posture where the AI Search indexer reaches blobs over a shared private link instead of the trusted-services path."
+  type        = bool
+  default     = true
+}
+
 variable "topics" {
   description = "Map of topic slug => display name. Sample docs are only uploaded for configured topics."
   type        = map(string)

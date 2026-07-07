@@ -26,11 +26,11 @@ resource "azurerm_cognitive_account" "openai" {
   # Required for private endpoint support and AAD token auth on Cognitive Services accounts.
   custom_subdomain_name = var.openai_name
 
-  # Public access stays enabled so the AI Search indexer's AzureOpenAIEmbeddingSkill can reach
-  # OpenAI. The indexer runs outside any VNet and cannot use a private endpoint. Access is still
-  # secured by RBAC / keys; a private endpoint (root config) provides a private path for App
-  # Service traffic from within the VNet.
-  public_network_access_enabled = true
+  # Public access is controlled by the caller. In the private posture (openai_public_network_access
+  # = false) the account is only reachable over its private endpoint (App Service traffic) and a
+  # Search shared private link (the indexer's AzureOpenAIEmbeddingSkill). The free config leaves it
+  # public because that config has no VNet, private endpoints, or shared private links.
+  public_network_access_enabled = var.openai_public_network_access
 }
 
 resource "azurerm_cognitive_deployment" "chat" {
