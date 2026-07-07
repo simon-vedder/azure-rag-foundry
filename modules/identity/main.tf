@@ -81,14 +81,30 @@ resource "azuread_application" "main" {
     }
   }
 
-  # No Microsoft Graph permissions are requested. The app reads the user's identity and roles from
-  # the signed Easy Auth principal header (see app/access.py) and never calls Graph. Easy Auth's
-  # OIDC sign-in (openid/profile/email) requires no declared API permission or admin consent.
+  # The app reads the user's identity and roles from the signed Easy Auth principal header
+  # (see app/access.py) and never calls Graph, so it declares no Graph application permissions.
+  # Easy Auth's OIDC sign-in still requests the openid/profile/email delegated scopes; those are
+  # granted tenant-wide below so sign-in works even in tenants where user consent is disabled.
 }
 
 resource "azuread_service_principal" "main" {
   client_id                    = azuread_application.main.client_id
   app_role_assignment_required = var.require_role_assignment
+}
+
+# Tenant-wide admin consent for the OIDC sign-in scopes Easy Auth requests. In tenants where user
+# consent is disabled, non-admin users are otherwise blocked at sign-in with "approval required".
+data "azuread_application_published_app_ids" "well_known" {}
+
+resource "azuread_service_principal" "msgraph" {
+  client_id    = data.azuread_application_published_app_ids.well_known.result["MicrosoftGraph"]
+  use_existing = true
+}
+
+resource "azuread_service_principal_delegated_permission_grant" "easy_auth_oidc" {
+  service_principal_object_id          = azuread_service_principal.main.object_id
+  resource_service_principal_object_id = azuread_service_principal.msgraph.object_id
+  claim_values                         = ["openid", "profile", "email"]
 }
 
 # Easy Auth credential.

@@ -45,7 +45,11 @@ resource "azurerm_linux_web_app" "main" {
   location            = var.location
   resource_group_name = var.resource_group_name
   service_plan_id     = azurerm_service_plan.main.id
-  zip_deploy_file     = data.archive_file.app.output_path
+
+  # Code is deployed by terraform_data.app_deploy below, not zip_deploy_file. azurerm only redeploys
+  # zip_deploy_file when the *path* changes, and the archive path is constant — so a pure code change
+  # (same path, new content) would silently never deploy. Keying an explicit `az webapp deploy` off
+  # the archive's content hash makes every code change deploy deterministically.
 
   virtual_network_subnet_id = var.vnet_subnet_id
 
@@ -116,4 +120,25 @@ resource "azurerm_linux_web_app" "main" {
       error_message = "VNet integration requires a Basic-tier or higher App Service SKU; Free/Shared SKUs (F1, D1) do not support it."
     }
   }
+}
+
+# Deploys the application zip and redeploys whenever its content changes. triggers_replace keys off
+# the archive's content hash, so this runs on the initial create and on every code change — closing
+# the azurerm zip_deploy_file gap where a same-path/new-content change never redeploys. Requires the
+# Azure CLI (already a prerequisite for the Search data plane) authenticated on the apply host.
+resource "terraform_data" "app_deploy" {
+  triggers_replace = [data.archive_file.app.output_base64sha256]
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      az webapp deploy \
+        --resource-group "${var.resource_group_name}" \
+        --name "${var.app_name}" \
+        --src-path "${data.archive_file.app.output_path}" \
+        --type zip
+    EOT
+  }
+
+  depends_on = [azurerm_linux_web_app.main]
 }

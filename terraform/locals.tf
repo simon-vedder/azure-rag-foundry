@@ -21,23 +21,27 @@ locals {
 
   app_url = "https://${local.app_name}.azurewebsites.net"
 
-  # Public access logic:
-  # - No VNet integration: all backends publicly accessible (development mode).
-  # - VNet integration + client IP detected: AI Search stays public but restricted to that IP,
-  #   allowing terraform apply to manage data plane resources from the local machine.
-  #   Other backends (OpenAI, Storage) are fully locked down via private endpoints.
-  # - VNet integration + no client IP: all backends fully locked down (pipeline/jump box required).
+  # Public access logic (VNet integration on = production/private posture):
+  # - No VNet integration (dev): all backends publicly accessible over RBAC — simplest to deploy.
+  # - VNet integration on: only the App Service is reachable from the internet. OpenAI is fully
+  #   private (App Service via private endpoint, the AI Search indexer via a shared private link).
+  #   AI Search and Storage keep public access enabled but deny everything except the deployer's IP,
+  #   so terraform apply can still provision the Search data plane and upload sample docs from a
+  #   laptop; the AI Search indexer reaches Storage over a shared private link, not the public path.
   client_ip        = trimspace(data.http.my_ip.response_body)
   create_search_pe = var.enable_vnet_integration
-  # AI Search public access is always enabled — access control is handled by IP firewall rules
-  # (search_allowed_ips) when VNet integration is active, rather than fully disabling public access.
-  # This allows terraform apply to manage data plane resources from the local machine in all modes.
+
+  # AI Search: kept publicly reachable but firewalled to the deployer IP when private, so the data
+  # plane (index/skillset/indexer) can be managed without a VNet-connected runner.
   search_public_access = true
   search_allowed_ips   = var.enable_vnet_integration ? [local.client_ip] : []
 
-  # Storage uses network rules (IP restriction + AzureServices bypass) instead of fully disabling
-  # public access. This allows terraform apply to upload sample docs and lets the AI Search indexer
-  # reach the storage account via the trusted Azure services bypass.
+  # OpenAI: no deployer-side data-plane call at apply time (model deployments are control plane), so
+  # it can go fully private when VNet integration is on.
+  openai_public_access = !var.enable_vnet_integration
+
+  # Storage: deny-all-except-deployer-IP when private, with the trusted-services bypass dropped so
+  # the indexer must use its shared private link rather than the broad AzureServices path.
   storage_network_rules_enabled = var.enable_vnet_integration
   storage_allowed_ips           = var.enable_vnet_integration ? [local.client_ip] : []
 }

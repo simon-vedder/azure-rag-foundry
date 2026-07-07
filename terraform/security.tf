@@ -1,6 +1,9 @@
-# Dedicated user-assigned identity used ONLY as the Easy Auth federated-credential subject.
-# Keeping it separate from the app's system-assigned identity (which holds the data-plane RBAC)
-# means nothing beyond this app registration's login flow can authenticate as the Entra app.
+# User-assigned identity for this app. It is the Easy Auth federated-credential subject AND the
+# data-plane identity the app code authenticates as. The two roles are combined deliberately:
+# App Service attaches this identity alongside the app's system-assigned one, and with two
+# identities present DefaultAzureCredential cannot be reliably pointed at the system-assigned one
+# (its client id is not selectable via AZURE_CLIENT_ID on App Service). So the app pins to THIS
+# identity (AZURE_CLIENT_ID in compute.tf) and all data-plane RBAC below is granted to it.
 resource "azurerm_user_assigned_identity" "easy_auth" {
   name                = local.uami_name
   location            = azurerm_resource_group.main.location
@@ -31,18 +34,18 @@ module "identity" {
   tenant_id                 = data.azuread_client_config.current.tenant_id
 }
 
-# RBAC: App Service Managed Identity → Azure OpenAI
+# RBAC: App user-assigned identity → Azure OpenAI
 resource "azurerm_role_assignment" "app_openai" {
   scope                = module.ai.openai_id
   role_definition_name = "Cognitive Services OpenAI User"
-  principal_id         = module.app.principal_id
+  principal_id         = azurerm_user_assigned_identity.easy_auth.principal_id
 }
 
-# RBAC: App Service Managed Identity → AI Search (read + query)
+# RBAC: App user-assigned identity → AI Search (read + query)
 resource "azurerm_role_assignment" "app_search_reader" {
   scope                = module.ai.search_id
   role_definition_name = "Search Index Data Reader"
-  principal_id         = module.app.principal_id
+  principal_id         = azurerm_user_assigned_identity.easy_auth.principal_id
 }
 
 # RBAC: App Service Managed Identity → AI Search service administration.
@@ -53,14 +56,14 @@ resource "azurerm_role_assignment" "app_search_reader" {
 resource "azurerm_role_assignment" "app_search_contributor" {
   scope                = module.ai.search_id
   role_definition_name = "Search Service Contributor"
-  principal_id         = module.app.principal_id
+  principal_id         = azurerm_user_assigned_identity.easy_auth.principal_id
 }
 
-# RBAC: App Service Managed Identity → Storage.
+# RBAC: App user-assigned identity → Storage.
 # Contributor (not Reader) because the in-app document manager uploads blobs, sets the IsDeleted
 # soft-delete metadata, and writes the topic/access_level metadata the search index relies on.
 resource "azurerm_role_assignment" "app_storage" {
   scope                = module.storage.id
   role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = module.app.principal_id
+  principal_id         = azurerm_user_assigned_identity.easy_auth.principal_id
 }

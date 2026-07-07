@@ -52,8 +52,8 @@ variable "embedding_model" {
 }
 
 variable "enable_vnet_integration" {
-  description = "Enables App Service VNet integration (outbound) and private endpoints for all backends. Requires a Basic-tier or higher App Service SKU (P1v3 recommended for production)."
-  default     = false
+  description = "Enables the private network posture: App Service VNet integration (outbound), private endpoints for all backends, OpenAI public access disabled, and Search/Storage firewalled to the deployer IP. Only the App Service stays reachable from the internet. Requires a Basic-tier or higher App Service SKU (P1v3 recommended). Set false only for a cheaper all-public test in this folder."
+  default     = true
 }
 
 variable "company_name" {

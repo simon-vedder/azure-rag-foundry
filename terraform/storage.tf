@@ -7,6 +7,8 @@ module "storage" {
 
   network_rules_enabled = local.storage_network_rules_enabled
   allowed_ips           = local.storage_allowed_ips
+  # Indexer reaches blobs over a shared private link (see network.tf), not the trusted-services path.
+  trusted_services_bypass = false
 
   topics           = var.topics
   tiers            = var.tiers

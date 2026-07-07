@@ -67,6 +67,12 @@ variable "search_public_network_access" {
   default = true
 }
 
+variable "openai_public_network_access" {
+  description = "Whether the Azure OpenAI account is reachable over its public endpoint. Set false for a private posture; App Service then reaches it via a private endpoint and the AI Search indexer via a shared private link."
+  type        = bool
+  default     = true
+}
+
 variable "search_allowed_ips" {
   type    = list(string)
   default = []

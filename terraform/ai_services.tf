@@ -20,6 +20,7 @@ module "ai" {
   search_identity_enabled      = true
   search_public_network_access = local.search_public_access
   search_allowed_ips           = local.search_allowed_ips
+  openai_public_network_access = local.openai_public_access
   semantic_search_sku          = "free"
 }
 

@@ -38,6 +38,13 @@ module "app" {
     TIERS                             = jsonencode(var.tiers)
     PUBLIC_TIER_MODE                  = var.public_tier_mode
 
+    # The app has BOTH a system-assigned and a user-assigned identity (the latter is required for
+    # secretless Easy Auth). With two identities attached, App Service IMDS does not reliably hand
+    # DefaultAzureCredential the system-assigned one, so we pin the data-plane credential to the
+    # user-assigned identity explicitly. Its client id (below) cannot select the system-assigned
+    # identity, so the data-plane RBAC in security.tf is granted to THIS identity, not the SA one.
+    AZURE_CLIENT_ID = azurerm_user_assigned_identity.easy_auth.client_id
+
     # Easy Auth reads this (the federated-credential identity's client id) in place of a secret.
     OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID = azurerm_user_assigned_identity.easy_auth.client_id
   }

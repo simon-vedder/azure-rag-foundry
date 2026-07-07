@@ -13,8 +13,11 @@ resource "azurerm_storage_account" "main" {
   account_tier             = "Standard"
   account_replication_type = "LRS"
 
-  # Storage stays publicly accessible but IP-restricted when network rules are on.
-  # AzureServices bypass keeps the AI Search indexer working without a shared private link.
+  # Public access stays enabled so terraform can upload sample docs from the deployer's IP, but when
+  # network rules are on the account denies everything except that IP. Backend traffic is private:
+  # App Service reaches blobs over the blob private endpoint and, with trusted_services_bypass off,
+  # the AI Search indexer reaches them over a shared private link rather than the broad
+  # AzureServices trusted-services bypass.
   public_network_access_enabled   = true
   allow_nested_items_to_be_public = false
   https_traffic_only_enabled      = true
@@ -25,7 +28,7 @@ resource "azurerm_storage_account" "main" {
     content {
       default_action = "Deny"
       ip_rules       = var.allowed_ips
-      bypass         = ["AzureServices"]
+      bypass         = var.trusted_services_bypass ? ["AzureServices"] : ["None"]
     }
   }
 }

@@ -1,6 +1,6 @@
 # Azure RAG Foundry — Aria
 
-**Aria** is a ready-to-deploy enterprise RAG chatbot built on Azure. Employees authenticate with their company's Entra ID account and ask questions against internal documents in natural language. Answers stream back in real time, grounded in the documents — not hallucinated.
+**Aria** is a ready-to-deploy enterprise RAG chatbot built on Azure. Employees authenticate with their company's Entra ID account and ask questions against internal documents in natural language. Answers come back grounded in the documents — not hallucinated.
 
 Access is role-based: users only see documents they're authorized for.
 
@@ -8,7 +8,7 @@ Two Terraform configs are included:
 
 | Config | Tier | Cost | Use case |
 |---|---|---|---|
-| `terraform/` | Standard | ~$416/month | Production — MSI everywhere, no secrets (secretless Easy Auth), VNet-ready |
+| `terraform/` | Standard | ~$431/month + OpenAI usage | Production — MSI everywhere, no secrets (secretless Easy Auth), private networking on by default |
 | `terraform-free/` | Free | ~$15/month | Testing/demos — API keys, no VNet, fully functional |
 
 ---
@@ -52,7 +52,7 @@ Two Terraform configs are included:
 ## What you get
 
 - **Chat UI** — clean, modern interface (Aria branding, customizable per company)
-- **Streamed responses** — tokens appear as they're generated, not after a full round-trip
+- **Grounded answers** — each reply is generated from the retrieved document chunks and returned in a single response (non-streaming, so it passes cleanly through the Easy Auth proxy)
 - **Chunked retrieval** — documents are split into overlapping chunks and embedded per chunk for better recall and cleaner citations (not whole-file embedding)
 - **Hybrid search** — vector + keyword search across your documents (AI Search)
 - **Role-based document access** — configurable sensitivity tiers (default `general`, `internal`) enforced server-side
@@ -75,7 +75,7 @@ App Service — FastAPI (Python 3.12)
   ├── /            → landing page (cards for the topics a user can access)
   ├── /t/<topic>   → topic-scoped chat UI
   ├── /admin       → document manager (Content.Admin holders)
-  ├── /api/chat    → SSE streaming: embed → search → GPT-4o stream
+  ├── /api/chat    → RAG pipeline: embed → search (role-filtered) → GPT-4o → one JSON response
   └── /health      → liveness check
 
 App Service Managed Identity (RBAC, no keys)
@@ -84,8 +84,8 @@ App Service Managed Identity (RBAC, no keys)
   └── Blob Storage     — document source (documents/ container)
 ```
 
-**Test mode (default):** App Service reaches backend services over public endpoints using RBAC. No VNet needed.  
-**Production mode:** Private endpoints + VNet integration move backend traffic onto a private network. Flip one variable (`enable_vnet_integration = true`); `terraform/` already defaults to P1v3 and the standard Search tier.
+**Production mode (default):** `enable_vnet_integration = true` — private endpoints + VNet integration keep backend traffic on a private network, OpenAI public access is disabled, and Search/Storage are firewalled to the deployer IP. Only the App Service is reachable from the internet. `terraform/` defaults to P1v3 and the standard Search tier for this.  
+**Test mode:** set `enable_vnet_integration = false` for a cheaper all-public deployment where App Service reaches the backends over public endpoints using RBAC. No VNet needed.
 
 ---
 
@@ -371,7 +371,8 @@ Run `terraform apply`. With `enable_vnet_integration = true`:
 
 - Private endpoints are created for OpenAI, AI Search, and Storage, so App Service reaches them privately
 - App Service is integrated into the VNet via subnet delegation, routing its outbound traffic through the VNet
-- Public access to the backends is restricted to the deployer's IP (plus trusted Azure services) rather than fully disabled — the AI Search indexer and Terraform's data-plane provisioning still need a reachable path
+- **Only the App Service is reachable from the internet.** OpenAI has public network access disabled entirely — App Service reaches it over its private endpoint, and the AI Search indexer's embedding skill reaches it over a **shared private link**. The indexer reads blobs over a **shared private link** to Storage, not the public path
+- AI Search and Storage keep public access enabled but firewalled to **deny everything except the deployer's current IP**, so `terraform apply` can still provision the Search data plane and upload sample docs from a laptop without a VNet-connected runner. Nothing else on the internet can reach them. (For a zero-public-surface posture, set their public access to disabled and run `apply` from a jumpbox/runner inside the VNet.)
 
 > **Cost tip:** Buy a 1-year reserved instance for P1v3 on day one — saves ~35% (~$130 → ~$85/month).
 
@@ -411,34 +412,67 @@ terraform {
 
 ## Cost Estimate
 
-Retail USD, Sweden Central. Actual costs depend on usage volume and any EA/reserved-instance discounts.
+Costs split into two parts: **fixed infrastructure** that runs 24/7 regardless of use, and **variable Azure OpenAI usage** that is pay-per-token and scales with how much people query Aria. Retail USD, Sweden Central — EA/CSP and reserved-instance discounts bring these down.
 
-### Test (~$15–30/month)
+### Fixed infrastructure
 
-| Resource | SKU | Monthly |
-|---|---|---|
-| App Service Plan | B1 | $13 |
-| Azure OpenAI | S0 GlobalStandard | pay-per-token ¹ |
-| AI Search | Free | $0 |
-| Blob Storage | Standard LRS | ~$0.10 |
-| Log Analytics + App Insights | PerGB2018 | ~$0 ² |
-| Private DNS zones ×3 | — | $1.50 |
-
-¹ GPT-4o: $2.50/1M input tokens, $10/1M output tokens. text-embedding-3-small: $0.02/1M tokens.  
-² Includes 5 GB/day free — a test workload stays within the free tier.
-
-### Production (~$416/month fixed + OpenAI usage)
+**Production (`terraform/`) — ~$431/month**
 
 | Resource | SKU | Monthly |
 |---|---|---|
 | App Service Plan | P1v3 | $130 |
-| Azure OpenAI | S0 GlobalStandard | pay-per-token ¹ |
 | AI Search | Standard S1 | $245 |
-| Blob Storage | Standard LRS | ~$5 |
 | Log Analytics + App Insights | PerGB2018 | ~$13 |
+| Blob Storage | Standard LRS | ~$5 |
+| Private endpoints ×3 (OpenAI, Search, Storage) | Standard | ~$22 |
+| Shared private links ×2 (Search→OpenAI, Search→Storage) | Standard | ~$15 |
+| Private DNS zones ×3 | — | ~$1.50 |
 | Managed identity (Easy Auth FIC) | — | $0 |
-| Private DNS zones ×3 | — | $1.50 |
-| Private endpoints ×3 | — | ~$22 |
+| **Fixed subtotal** | | **~$431** |
+
+**Test (`terraform-free/`) — ~$15/month**
+
+| Resource | SKU | Monthly |
+|---|---|---|
+| App Service Plan | B1 | $13 |
+| AI Search | Free | $0 |
+| Blob Storage | Standard LRS | ~$0.10 |
+| Log Analytics + App Insights | PerGB2018 | ~$0 ¹ |
+| **Fixed subtotal** | | **~$13** |
+
+¹ Includes 5 GB/day free — a test workload stays within the free tier. The free config has no VNet, so it carries none of the private-networking cost below.
+
+> **Networking is a small slice.** The full private posture (`enable_vnet_integration = true`) — 3 private endpoints + 2 shared private links + 3 DNS zones — adds **~$38/month**: five private-link endpoints at ~$7.30 each ($0.01/hour) plus ~$1.50 for DNS. That is ~9% of the production fixed cost, and a far smaller share once OpenAI usage is included. AI Search Standard S1 ($245) is by far the largest fixed line; each extra `search_replica_count` / `search_partition_count` adds roughly another $245.
+
+### Variable: Azure OpenAI usage
+
+This is the part that grows with adoption. Aria is billed per token on GlobalStandard — there is no idle cost, only what queries consume.
+
+- **GPT-4o (chat):** $2.50 / 1M input tokens, $10 / 1M output tokens
+- **text-embedding-3-small:** $0.02 / 1M tokens
+
+**Per query** (typical RAG turn — system prompt + ~5 retrieved chunks ≈ 3,000 input tokens, ~400-token answer):
+
+| | Tokens | Cost |
+|---|---|---|
+| Input | ~3,000 | $0.0075 |
+| Output | ~400 | $0.0040 |
+| Question embedding | ~100 | ~$0.000002 |
+| **Per query** | | **~$0.012** |
+
+So roughly **~$12 per 1,000 queries**. Scaled out:
+
+| Scenario | Queries/month | OpenAI/month |
+|---|---|---|
+| Light — 20 users × 5/day | ~2,000 | ~$25 |
+| Medium — 100 users × 10/day | ~22,000 | ~$265 |
+| Heavy — 500 users × 15/day | ~165,000 | ~$1,980 |
+
+Embeddings are effectively free: indexing a large corpus (millions of tokens) costs cents once, and each query embeds only the question. The dominant variable cost is GPT-4o output tokens — a shorter-answer system prompt or a smaller/cheaper chat model (e.g. gpt-4o-mini-class) is the biggest lever if usage costs climb. `openai_capacity` caps throughput (tokens/minute), not spend.
+
+**Total ≈ fixed subtotal + OpenAI usage.** A medium production deployment lands around **~$431 + ~$265 ≈ $700/month**; a lightly-used one closer to **~$455/month**.
+
+> **Cost tip:** A 1-year reserved instance for P1v3 saves ~35% (~$130 → ~$85/month), and an AI Search reservation cuts the largest fixed line similarly.
 
 ---
 
@@ -466,7 +500,7 @@ Variables common to both configs:
 | Variable | Default | Description |
 |---|---|---|
 | `app_service_sku` | `"P1v3"` | App Service SKU. VNet integration requires Basic tier or higher (P1v3 recommended) |
-| `enable_vnet_integration` | `false` | Enable VNet + private endpoints |
+| `enable_vnet_integration` | `true` | Private posture: VNet + private endpoints + shared private links, OpenAI public access off, Search/Storage firewalled to the deployer IP. Set `false` for a cheaper all-public test |
 | `search_replica_count` | `1` | AI Search replicas. 2+ for a query SLA / HA. Each replica increases Search cost |
 | `search_partition_count` | `1` | AI Search partitions. Increase for larger indexes / throughput. Partitions multiply Search cost |
 | `alert_email` | `""` | Email for metric-alert notifications. Empty = alerts created without a notification target |
@@ -484,6 +518,12 @@ Variables common to both configs:
 > - **No private endpoints.** All backend services are reachable over public internet endpoints. Access is gated by RBAC, but credentials obtained from a compromised workload would be exploitable from anywhere.
 >
 > **Summary:** `terraform-free/` is safe for demos, prototypes, and non-sensitive documents. Before loading content that actually matters, use the `terraform/` config and ensure your Terraform state backend has proper access controls.
+
+---
+
+> **Retrieval stability — vector candidate pool**
+>
+> Hybrid search hands a pool of vector candidates to RRF fusion and the semantic reranker. That pool (`k_nearest_neighbors` in `app/app.py`) is intentionally much larger than the number of chunks shown to the model (`top`). If it is too small, a cold HNSW graph can return a slightly different approximate top-k on the first query after idle and drop the relevant chunk from the pool entirely — so the model answers *"I couldn't find that in the available documents"* once, then returns the correct grounded answer on an identical retry. This affects both Search tiers, not just the free one. Aria uses `k_nearest_neighbors = 50` to keep retrieval stable and cold-start-proof; keep it well above `top` if you tune either.
 
 ---
 
@@ -539,6 +579,7 @@ The infrastructure changes in [Going to Production](#going-to-production) handle
 - **App Role assignment review** — `Internal.Read` and `Confidential.Read` are powerful. Use Entra ID *groups* rather than individual users so access is managed through your existing group lifecycle (joiners/movers/leavers). Review assignments quarterly.
 - **Secretless Easy Auth** — built-in auth has no client secret to rotate or leak. App Service authenticates to Entra ID with a federated identity credential backed by a dedicated user-assigned managed identity (`use_managed_identity_auth = true` on the identity module). The MI's client id is the only value in app settings; there is no secret in app settings, Key Vault, or Terraform state. Workforce tenants only.
 - **Microsoft Defender for Cloud** — enable Defender plans for App Service and Storage. They surface misconfigurations and threat signals with minimal setup.
+- **Backend network exposure** — with `enable_vnet_integration = true`, OpenAI is fully private (public access disabled; reached via private endpoint and a Search shared private link). AI Search and Storage keep `public_network_access_enabled = true` but with a **deny-all-except-deployer-IP** firewall, so `terraform apply` can provision the Search data plane and upload sample docs from a laptop — nothing else on the internet reaches them, and the AI Search indexer talks to Storage over a shared private link rather than the public path. If your compliance posture forbids `public_network_access_enabled = true` even behind a deny-all firewall, set AI Search and Storage public access to disabled and run all provisioning/data-plane operations from a runner or jumpbox inside the VNet.
 
 #### Extending the access model
 

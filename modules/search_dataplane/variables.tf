@@ -58,3 +58,14 @@ variable "chunk_overlap_chars" {
   type    = number
   default = 200
 }
+
+variable "execution_environment" {
+  description = "Indexer execution environment. Set to \"private\" when the search service reaches network-restricted backends over shared private links; leave null (standard/multi-tenant) for all-public deployments."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.execution_environment == null || contains(["standard", "private"], var.execution_environment)
+    error_message = "execution_environment must be null, \"standard\", or \"private\"."
+  }
+}
