@@ -1,6 +1,6 @@
 # Azure RAG Foundry — Aria
 
-**Aria** is a ready-to-deploy enterprise RAG chatbot built on Azure. Employees authenticate with their company's Entra ID account and ask questions against internal documents in natural language. Answers stream back in real time, grounded in the documents — not hallucinated.
+**Aria** is a ready-to-deploy enterprise RAG chatbot built on Azure. Employees authenticate with their company's Entra ID account and ask questions against internal documents in natural language. Answers come back grounded in the documents — not hallucinated.
 
 Access is role-based: users only see documents they're authorized for.
 
@@ -52,7 +52,7 @@ Two Terraform configs are included:
 ## What you get
 
 - **Chat UI** — clean, modern interface (Aria branding, customizable per company)
-- **Streamed responses** — tokens appear as they're generated, not after a full round-trip
+- **Grounded answers** — each reply is generated from the retrieved document chunks and returned in a single response (non-streaming, so it passes cleanly through the Easy Auth proxy)
 - **Chunked retrieval** — documents are split into overlapping chunks and embedded per chunk for better recall and cleaner citations (not whole-file embedding)
 - **Hybrid search** — vector + keyword search across your documents (AI Search)
 - **Role-based document access** — configurable sensitivity tiers (default `general`, `internal`) enforced server-side
@@ -75,7 +75,7 @@ App Service — FastAPI (Python 3.12)
   ├── /            → landing page (cards for the topics a user can access)
   ├── /t/<topic>   → topic-scoped chat UI
   ├── /admin       → document manager (Content.Admin holders)
-  ├── /api/chat    → SSE streaming: embed → search → GPT-4o stream
+  ├── /api/chat    → RAG pipeline: embed → search (role-filtered) → GPT-4o → one JSON response
   └── /health      → liveness check
 
 App Service Managed Identity (RBAC, no keys)

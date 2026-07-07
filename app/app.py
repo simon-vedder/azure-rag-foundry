@@ -12,7 +12,7 @@
 #   GET  /                     landing page — cards for the topics the user can access
 #   GET  /t/{topic}            topic-scoped chat UI
 #   GET  /admin                document manager (Content.Admin holders only)
-#   POST /api/chat             topic-scoped streaming RAG answer (SSE)
+#   POST /api/chat             topic-scoped RAG answer (non-streaming; see generate_answer)
 #   GET  /api/topics           topics the current user may access
 #   GET  /api/topics/{t}/overview  AI suggested questions + readable doc descriptions (access-scoped)
 #   GET  /api/admin/topics     topics the current user may manage
@@ -37,7 +37,7 @@ from azure.search.documents.indexes import SearchIndexerClient
 from azure.search.documents.models import VectorizedQuery
 from azure.storage.blob import BlobServiceClient, ContentSettings
 from fastapi import FastAPI, HTTPException, Request, UploadFile, Form, File
-from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from openai import AzureOpenAI
 from pydantic import BaseModel, field_validator
 
