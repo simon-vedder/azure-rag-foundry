@@ -1,12 +1,12 @@
-# Azure RAG Foundry — Aria
+# Aria Cloud
 
 ![Terraform](https://img.shields.io/badge/Terraform-7B42BC?logo=terraform&logoColor=white)
 ![Azure AI Foundry](https://img.shields.io/badge/Azure-AI_Foundry-0078D4?logo=microsoftazure&logoColor=white)
 ![Auth: Entra ID](https://img.shields.io/badge/Auth-Entra_ID-0078D4?logo=microsoftazure&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
-![Last commit](https://img.shields.io/github/last-commit/simon-vedder/azure-rag-foundry)
+![Last commit](https://img.shields.io/github/last-commit/simon-vedder/aria-cloud)
 
-**Aria** is a ready-to-deploy enterprise RAG chatbot built on Azure. Employees authenticate with their company's Entra ID account and ask questions against internal documents in natural language. Answers come back grounded in the documents — not hallucinated.
+**Aria Cloud** is a ready-to-deploy enterprise RAG chatbot built on Azure — the cloud edition of Aria (AI Research & Information Assistant). Employees authenticate with their company's Entra ID account and ask questions against internal documents in natural language. Answers come back grounded in the documents — not hallucinated.
 
 Access is role-based: users only see documents they're authorized for.
 
@@ -536,7 +536,7 @@ Variables common to both configs:
 ## File Structure
 
 ```
-azure-rag-foundry/
+aria-cloud/
 ├── modules/                    # Shared Terraform modules (thin roots compose these)
 │   ├── ai/                     # Azure OpenAI + model deployments, AI Search
 │   ├── app/                    # App Service Plan + Web App, Log Analytics, App Insights
